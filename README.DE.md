@@ -28,6 +28,33 @@ Wenn es klappt, haben wir eine Taschentaverne für den Ranzen. Wenn nicht, bleib
 
 **Eigenen Tisch aufmachen?** Das Langweilige (aber Nötige) steht in **[SETUP.md](SETUP.md)**.
 
+## Spielen ohne Grok (ohne API-Key)
+
+Grok als Live-Spielleiter braucht `XAI_API_KEY` (kostenpflichtige API). Zum Testen der Taverne **nicht**.
+
+Setze `GM_BACKEND=mock` in `.env` und starte `python -m mesa.main`. Der Bot ist dann eine Python-Compilation-Kassette: dieselbe `/cmd`-Grammatik, kein Agent, keine Rechnung.
+
+```
+/cmd list games          lokale Spiele auflisten
+/cmd load blackjack      eines per id starten (Admin)
+/cmd new-game cartas del 21   dasselbe, wenn der Text passt
+```
+
+Sonst Echo-Tisch (join / act / look).
+
+| Sag das | Bekommst du |
+|---|---|
+| `/cmd new-game cartas del 21` | 21, 48 Karten. `join`, `otra`, `planto`. ASCII-Karten. `GANADOR ES:` |
+| `/cmd new-game mini rol, un goblin en la cueva` | Mini-Rollenspiel. `look`, `go norte`, `attack` |
+| `/cmd new-game acertijos sobre el mar` | Rätsel. `guess`, `hint`, `next` |
+| `/cmd new-game trivia de cine` | Quiz. `a` `b` `c` `d` |
+| `/cmd new-game duelo de dados` | 2d6. `roll` |
+| `/cmd new-game piedra papel tijera` | `piedra` `papel` `tijera` |
+| `/cmd new-game adivina el número` | 1–100. `guess 42` |
+| `/cmd new-game tres en raya` | `put 5` |
+
+Das sind Attrappen, nicht Grok. Damit ein Kind heute Abend spielen kann, während der Erwachsene überlegt, ob der API-Drache Futter bekommt.
+
 ---
 
 Das ganze Zauberbuch eines Spielers, ungefähr:

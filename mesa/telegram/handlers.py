@@ -12,6 +12,7 @@ from telegram.ext import Application, ContextTypes, MessageHandler, filters
 from mesa import admin as admin_mod
 from mesa.config import Config
 from mesa.dice import roll as roll_dice
+from mesa.games import catalog_lines, get_game, resolve_game
 from mesa.gm.base import GameMaster, apply_reply, build_request
 from mesa.parse import (
     ADMIN_VERBS,
@@ -39,8 +40,8 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Un admin describe el juego; Grok inventa reglas y comandos.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
-        "help_after": "Tras new-game: /cmd cmd list. Admin: /cmd clear all borra el grupo.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_after": "Juegos locales: /cmd list games  y  /cmd load blackjack",
         "tag_purge": "clear",
         "purge_need": "Borra TODOS los mensajes de cualquiera. Confirma: /cmd clear all",
         "purge_work": "Borrando todos los mensajes…",
@@ -73,6 +74,10 @@ _MSG = {
         "lbl_cmds": "cmds",
         "lbl_pcs": "pcs",
         "none": "(ninguno)",
+        "tag_games": "juegos",
+        "games_hint": "/cmd load blackjack",
+        "load_bad": "Juego desconocido. /cmd list games",
+        "load_need": "Indica el juego: /cmd load blackjack",
     },
     "fr": {
         "tag_help": "aide",
@@ -83,8 +88,8 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Un admin décrit le jeu ; Grok invente règles et commandes.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
-        "help_after": "Après new-game : /cmd cmd list. Admin : /cmd clear all vide le groupe.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_after": "Jeux locaux : /cmd list games  et  /cmd load blackjack",
         "tag_purge": "clear",
         "purge_need": "Efface TOUS les messages de n'importe qui. Confirme : /cmd clear all",
         "purge_work": "Suppression de tous les messages…",
@@ -117,6 +122,10 @@ _MSG = {
         "lbl_cmds": "cmds",
         "lbl_pcs": "pcs",
         "none": "(aucun)",
+        "tag_games": "jeux",
+        "games_hint": "/cmd load blackjack",
+        "load_bad": "Jeu inconnu. /cmd list games",
+        "load_need": "Indique le jeu : /cmd load blackjack",
     },
     "de": {
         "tag_help": "hilfe",
@@ -127,8 +136,8 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Ein Admin beschreibt das Spiel; Grok erfindet Regeln und Befehle.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
-        "help_after": "Nach new-game: /cmd cmd list. Admin: /cmd clear all leert die Gruppe.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_after": "Lokale Spiele: /cmd list games  und  /cmd load blackjack",
         "tag_purge": "clear",
         "purge_need": "Löscht ALLE Nachrichten von jedem. Bestätigen: /cmd clear all",
         "purge_work": "Lösche alle Nachrichten…",
@@ -161,6 +170,10 @@ _MSG = {
         "lbl_cmds": "cmds",
         "lbl_pcs": "pcs",
         "none": "(keine)",
+        "tag_games": "spiele",
+        "games_hint": "/cmd load blackjack",
+        "load_bad": "Unbekanntes Spiel. /cmd list games",
+        "load_need": "Spiel angeben: /cmd load blackjack",
     },
     "en": {
         "tag_help": "help",
@@ -171,8 +184,8 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "An admin describes the game; Grok invents rules and commands.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
-        "help_after": "After new-game: /cmd cmd list. Admin: /cmd clear all wipes the group.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_after": "Local games: /cmd list games  and  /cmd load blackjack",
         "tag_purge": "clear",
         "purge_need": "Deletes EVERY message from anyone. Confirm: /cmd clear all",
         "purge_work": "Deleting every message…",
@@ -205,6 +218,10 @@ _MSG = {
         "lbl_cmds": "cmds",
         "lbl_pcs": "pcs",
         "none": "(none)",
+        "tag_games": "games",
+        "games_hint": "/cmd load blackjack",
+        "load_bad": "Unknown game. /cmd list games",
+        "load_need": "Name a game: /cmd load blackjack",
     },
 }
 
@@ -370,6 +387,34 @@ async def process_command(ctx: BridgeContext, text: str) -> str | PurgeAll | Non
             ],
         )
 
+    if verb == "list":
+        ctx.store.save(state)
+        hint = payload.strip().lower()
+        if hint and hint not in {"games", "game", "juegos", "jeux", "spiele", "local"}:
+            return _notice(lang, "tag_games", _m(lang, "games_hint"))
+        lines = catalog_lines(lang) + [DIV, _m(lang, "games_hint")]
+        return card(_m(lang, "tag_games"), lines)
+
+    if verb == "load":
+        name = payload.strip()
+        if not name:
+            ctx.store.save(state)
+            return _notice(lang, "tag_stop", _m(lang, "load_need"))
+        game = resolve_game(name)
+        if game is None:
+            ctx.store.save(state)
+            return _notice(lang, "tag_stop", _m(lang, "load_bad"))
+        state.reset_table()
+        state.brief = f"load {game.id}"
+        state.phase = "playing"
+        turn = game.start(lang, game.id)
+        state.title = turn.title or game.id
+        state.commands = turn.commands or []
+        state.rules = turn.rules or []
+        state.blob = {"_local": game.id, "g": turn.state}
+        ctx.store.save(state)
+        return turn.say
+
     if verb == "grant":
         target = admin_mod.resolve_user_id(payload, ctx.mentions)
         if target is None:
@@ -435,6 +480,31 @@ async def process_command(ctx: BridgeContext, text: str) -> str | PurgeAll | Non
             state.phase = "lobby"
 
     ctx.store.save(state)
+
+    local_id = (state.blob or {}).get("_local")
+    if local_id and verb not in SYSTEM_VERBS:
+        game = get_game(str(local_id))
+        if game is not None:
+            turn = game.handle(
+                verb,
+                payload,
+                {
+                    "user": {
+                        "id": ctx.user.id,
+                        "name": ctx.user.name,
+                        "username": ctx.user.username,
+                    }
+                },
+                dict((state.blob or {}).get("g") or {}),
+                lang,
+            )
+            state.blob = {"_local": local_id, "g": turn.state}
+            if turn.commands is not None:
+                state.commands = turn.commands
+            if turn.title:
+                state.title = turn.title
+            ctx.store.save(state)
+            return turn.say
 
     gm_reply = await _call_gm(ctx, state, verb, payload, is_adm, dice=None)
     if gm_reply is None:

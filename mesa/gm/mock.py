@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from mesa.games import get_game, pick_game
 from mesa.gm.base import SCHEMA_REPLY
 from mesa.parse import SYSTEM_VERBS
 from mesa.skin import DIV, bullets, card
@@ -80,10 +81,10 @@ _HELP = {
 }
 
 _SYSTEM_HELP = {
-    "es": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
-    "fr": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
-    "de": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
-    "en": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+    "es": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+    "fr": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+    "de": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+    "en": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
 }
 
 
@@ -286,7 +287,7 @@ def current_verb_list(commands: list[dict[str, str]]) -> str:
 
 
 class MockGM:
-    """Intelligent echo. Infers a command list from the new-game brief; no combat engine."""
+    """Local games plus a leftover echo if the brief matches nothing."""
 
     async def reply(self, request: dict[str, Any]) -> dict[str, Any] | None:
         verb = str(request.get("verb") or "")
@@ -295,6 +296,20 @@ class MockGM:
         table = request.get("table") or {}
 
         if verb == "new-game":
+            local = pick_game(payload)
+            if local is not None:
+                turn = local.start(lang, payload)
+                blob = {"_local": local.id, "g": turn.state}
+                return _reply(
+                    request,
+                    turn.say,
+                    phase=turn.phase,
+                    title=turn.title or local.id,
+                    commands=turn.commands or [],
+                    rules=turn.rules or infer_rules(payload),
+                    limits=[],
+                    blob=blob,
+                )
             kind = infer_kind(payload)
             title = infer_title(payload)
             rules = infer_rules(payload)
@@ -380,6 +395,23 @@ class MockGM:
                 limits=[],
                 blob={},
             )
+
+        blob = dict(table.get("blob") or {})
+        local_id = blob.get("_local")
+        if local_id and verb not in {"dice-result"}:
+            game = get_game(str(local_id))
+            if game is not None:
+                turn = game.handle(verb, payload, request, dict(blob.get("g") or {}), lang)
+                new_blob = {"_local": local_id, "g": turn.state}
+                return _reply(
+                    request,
+                    turn.say,
+                    phase=turn.phase,
+                    title=turn.title if turn.title is not None else table.get("title"),
+                    commands=turn.commands if turn.commands is not None else list(table.get("commands") or []),
+                    rules=turn.rules if turn.rules is not None else list(table.get("rules") or []),
+                    blob=new_blob,
+                )
 
         if verb == "dice-result":
             dice = request.get("dice") or {}

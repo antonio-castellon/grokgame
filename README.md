@@ -28,6 +28,33 @@ If it works, we get a pocket tavern that fits in a schoolbag. If it does not, we
 
 **Want to open your own table?** The boring (necessary) bits are in **[SETUP.md](SETUP.md)**.
 
+## Play without Grok (no API key)
+
+Grok as a live DM needs an `XAI_API_KEY` (paid API). You do **not** need that to try the tavern.
+
+Set `GM_BACKEND=mock` in `.env` and run `python -m mesa.main`. The bot is then a little cartridge compilation in Python: same `/cmd` grammar, no agent, no token bill.
+
+```
+/cmd list games          list the local cartridges
+/cmd load blackjack      start one by id (admin)
+/cmd new-game cartas del 21   same, if the brief matches
+```
+
+If the brief matches nothing, you get the old echo table (join / act / look).
+
+| Say this | You get |
+|---|---|
+| `/cmd new-game cartas del 21` | Spanish 48-card 21. `/cmd join`, `/cmd otra`, `/cmd planto`. ASCII cards + points. `GANADOR ES:` |
+| `/cmd new-game mini rol, un goblin en la cueva` | Tiny RPG. `/cmd join`, `look`, `go norte`, `attack`, `inventory` |
+| `/cmd new-game acertijos sobre el mar` | Riddles. `/cmd guess`, `hint`, `next` |
+| `/cmd new-game trivia de cine` | Quiz. `/cmd a` `b` `c` `d` |
+| `/cmd new-game duelo de dados` | 2d6. `/cmd roll` |
+| `/cmd new-game piedra papel tijera` | RPS. `/cmd piedra` `papel` `tijera` |
+| `/cmd new-game adivina el número` | 1–100. `/cmd guess 42` |
+| `/cmd new-game tres en raya` | Tic-tac-toe. `/cmd put 5` |
+
+These are mock-ups, not Grok. They exist so a kid can play tonight while the grown-up decides whether to feed the API dragon.
+
 ---
 
 A player’s entire spellbook, more or less:

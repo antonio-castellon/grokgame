@@ -32,10 +32,12 @@ def test_new_game_role_verbs():
         )
     )
     verbs = [c["verb"] for c in reply["commands"]]
-    assert verbs == ["join", "act", "look", "inventory"]
+    assert "join" in verbs
+    assert "look" in verbs
+    assert "attack" in verbs
     assert reply["phase"] == "playing"
     assert reply["lang"] == "es"
-    assert "tren" in reply["say"].lower() or "Tren" in reply["title"] or "tren" in reply["title"].lower()
+    assert (reply.get("blob") or {}).get("_local") == "rpg"
 
 
 def test_new_game_riddle_verbs():

@@ -65,7 +65,7 @@ ADMIN_TELEGRAM_IDS=83216105
 
 Comma-separated if several. Those ids are always table admins.
 
-Leave the rest of `.env` as mock for a first smoke test:
+Leave the rest of `.env` as mock for a first smoke test (local games, **no API key**):
 
 ```
 GM_BACKEND=mock
@@ -73,6 +73,8 @@ WEBHOOK_URL=
 WEBHOOK_SECRET=
 WEBHOOK_REPLY=http
 ```
+
+With `mock`, `/cmd new-game cartas del 21` (or rol, acertijos, trivia, dados, tres en raya, …) runs a Python game. See the README table. Grok is not called.
 
 ### 1.5 Start
 

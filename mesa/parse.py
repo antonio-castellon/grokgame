@@ -34,6 +34,8 @@ SYSTEM_VERBS = frozenset(
         "grant",
         "revoke",
         "clear",
+        "list",
+        "load",
     }
 )
 
@@ -47,6 +49,7 @@ ADMIN_VERBS = frozenset(
         "grant",
         "revoke",
         "clear",
+        "load",
     }
 )
 

@@ -35,6 +35,8 @@ def test_examples_from_brief():
         ("/cmd act abro el cajón izquierdo", "act", "abro el cajón izquierdo"),
         ("/cmd whoami", "whoami", ""),
         ("/cmd clear all", "clear", "all"),
+        ("/cmd list games", "list", "games"),
+        ("/cmd load blackjack", "load", "blackjack"),
     ]
     for text, verb, payload in cases:
         parsed = parse_cmd(text)
