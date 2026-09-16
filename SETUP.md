@@ -7,6 +7,10 @@ Telegram group  --/cmd-->  this app  --signed POST-->  Grok Automation
 Telegram group  <--say---  this app  <--HTTP body----  Grok Automation
 ```
 
+The three pieces (Agent, this Python, Telegram) are spelled out in the [README](README.md#the-three-pieces-that-talk-to-each-other).
+
+If the house PC must **not** stay online and you refuse `XAI_API_KEY`, use the sibling **[grok2telegram](https://github.com/antonio-castellon/grok2telegram)** instead: the loop runs on the Agent Bot VM and talks to Telegram itself.
+
 ---
 
 ## 0. Machine
@@ -200,6 +204,8 @@ XAI_MODEL=grok-4.6
 ```
 
 The app still pokes the automation webhook, then asks `api.x.ai` for the JSON `say` that gets posted to Telegram. `/cmd rules` and `/cmd limit` also apply locally if that body is missing.
+
+The other way off that bill is [grok2telegram](https://github.com/antonio-castellon/grok2telegram): the Agent Bot *is* the process that `sendMessage`s.
 
 ---
 
