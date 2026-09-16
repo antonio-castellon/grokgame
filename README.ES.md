@@ -28,6 +28,44 @@ Si funciona, tenemos una taberna de bolsillo que cabe en la mochila. Si no, igua
 
 **¿Quieres abrir tu propia mesa?** Lo aburrido (e imprescindible) está en **[SETUP.md](SETUP.md)**.
 
+---
+
+## Las tres piezas que se hablan
+
+Este repo es **una** de tres partes. No son tres copias del mismo programa. Cada una tiene un oficio.
+
+```
+  jugadores
+     |
+     v
+[3] Grupo de Telegram       la mesa. Los humanos escriben /cmd. Nadie abre Grok.
+     |
+     |  Bot API (HTTPS de salida)
+     v
+[2] Python en un PC         ESTE repositorio (grokgame).
+     |                       Parsea /cmd, guarda el JSON, tira dados si se los
+     |                       piden, habla con Telegram, despierta al máster.
+     |
+     |  webhook firmado / API
+     v
+[1] Agent / Automation      el cerebro. Inventa el juego con new-game,
+                             habla el idioma de la mesa, devuelve say.
+```
+
+| Pieza | Dónde vive | Qué le toca decidir |
+|---|---|---|
+| **1. Agente** | Nube Grok (suscripción) | Qué *es* el juego. Verbos tras `new-game`. Narración. Reglas que acaba de inventar el admin. |
+| **2. Python en el PC** | Tu máquina, este repo, `python -m mesa.main` | Gramática `/cmd`, quién es admin, JSON en disco, dados, I/O de Telegram. No la historia. |
+| **3. Telegram** | El grupo que creas a mano | Lo único que ven los jugadores. La app nunca crea el grupo. |
+
+El proceso del PC tiene que seguir en marcha o el grupo se queda mudo. El Agent duerme entre turnos: esta app lo despierta (webhook). Un webhook de Automations responde **`202` y cuerpo vacío** — es un timbre, no la frase dicha. Para que `say` vuelva al grupo hace falta `XAI_API_KEY` (ver SETUP) o el proyecto hermano de abajo.
+
+**Hermano, sin PC en el camino:** [grok2telegram](https://github.com/antonio-castellon/grok2telegram) monta el mismo tubo `/cmd` **en la máquina virtual del Agent Bot**. Long-poll a Telegram desde la nube de Grok (solo HTTPS de salida) y `sendMessage` al grupo. Úsalo cuando el PC de casa no puede ser servidor y no quieres la API de pago.
+
+No arranques *dos* bucles `getUpdates` a la vez (PC + VM) con el mismo token. Telegram entrega cada update a un solo waiter.
+
+---
+
 ## Jugar sin Grok (sin clave API)
 
 Para que Grok sea el máster en directo hace falta `XAI_API_KEY` (API de pago). **No** hace falta para probar la taberna.
