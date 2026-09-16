@@ -48,13 +48,29 @@ def test_plain_chat_does_not_call_gm(tmp_path: Path):
 
 def test_non_admin_cannot_new_game_reset_lang(tmp_path: Path):
     ctx = _ctx(tmp_path, user_id=99, admin=False)
-    for text in ("/cmd new-game faro", "/cmd reset", "/cmd lang es", "/cmd purge all"):
+    for text in ("/cmd new-game faro", "/cmd reset", "/cmd lang es", "/cmd clear all"):
         say = _run(ctx, text)
         assert say is not None
         assert "admin" in say.lower()
     state = ctx.store.load(ctx.chat_id)
     assert state.commands == []
     assert state.phase == "lobby"
+
+
+class _EmptyGM:
+    async def reply(self, request):
+        return None
+
+
+def test_rules_answers_when_gm_returns_empty_body(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    ctx.gm = _EmptyGM()
+    _run(ctx, "/cmd lang es")
+    say = _run(ctx, "/cmd rules no volar")
+    assert say is not None
+    assert "no volar" in _plain(say)
+    state = ctx.store.load(ctx.chat_id)
+    assert "no volar" in state.rules
 
 
 def test_join_rejected_in_lobby(tmp_path: Path):

@@ -80,10 +80,10 @@ _HELP = {
 }
 
 _SYSTEM_HELP = {
-    "es": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
-    "fr": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
-    "de": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
-    "en": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+    "es": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+    "fr": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+    "de": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+    "en": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
 }
 
 

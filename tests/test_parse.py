@@ -34,7 +34,6 @@ def test_examples_from_brief():
         ("/cmd reset", "reset", ""),
         ("/cmd act abro el cajón izquierdo", "act", "abro el cajón izquierdo"),
         ("/cmd whoami", "whoami", ""),
-        ("/cmd purge all", "purge", "all"),
         ("/cmd clear all", "clear", "all"),
     ]
     for text, verb, payload in cases:

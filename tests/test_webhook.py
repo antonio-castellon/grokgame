@@ -1,6 +1,7 @@
 import base64
 import json
 
+from mesa.gm.xai import _parse_content
 from mesa.gm.webhook import (
     HEADER_ID,
     HEADER_SIGNATURE,
@@ -47,3 +48,8 @@ def test_header_names():
     assert HEADER_ID == "webhook-id"
     assert HEADER_TIMESTAMP == "webhook-timestamp"
     assert HEADER_SIGNATURE == "webhook-signature"
+
+
+def test_xai_parse_fenced_json():
+    data = _parse_content('```json\n{"schema":"mesa.v1.reply","say":"hola"}\n```')
+    assert data["say"] == "hola"

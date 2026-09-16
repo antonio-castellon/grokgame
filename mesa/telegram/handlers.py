@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,7 +23,7 @@ from mesa.parse import (
 )
 from mesa.skin import DIV, as_html_pre, bullets, card
 from mesa.store import Store, TableState
-from mesa.telegram.purge import purge_upto
+from mesa.telegram.purge import bot_can_delete, purge_upto
 
 log = logging.getLogger(__name__)
 
@@ -38,10 +39,10 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Un admin describe el juego; Grok inventa reglas y comandos.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
-        "help_after": "Tras new-game: /cmd cmd list",
-        "tag_purge": "purge",
-        "purge_need": "Borra TODOS los mensajes de cualquiera. Confirma: /cmd purge all",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+        "help_after": "Tras new-game: /cmd cmd list. Admin: /cmd clear all borra el grupo.",
+        "tag_purge": "clear",
+        "purge_need": "Borra TODOS los mensajes de cualquiera. Confirma: /cmd clear all",
         "purge_work": "Borrando todos los mensajes…",
         "purge_ok": "Listo. Borrados ~{n} (omitidos {fail}).",
         "purge_denied": "El bot debe ser admin con permiso Borrar mensajes.",
@@ -61,6 +62,9 @@ _MSG = {
         "revoke_env": "{who} sigue admin (ADMIN_TELEGRAM_IDS).",
         "revoke_bad": "usa @usuario o un id: /cmd revoke 123",
         "webhook_empty": "El GM no devolvió cuerpo.",
+        "rule_ok": "Regla añadida: {line}",
+        "limit_ok": "Límite añadido: {line}",
+        "new_game_empty": "Grok recibió new-game, pero el webhook no envía el relato al grupo. Añade XAI_API_KEY en .env (console.x.ai).",
         "gm_error": "El GM no respondió ({err}).",
         "dice_bad": "Dado inválido: {expr}",
         "lang_local": "Idioma de la mesa: {lang}",
@@ -79,10 +83,10 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Un admin décrit le jeu ; Grok invente règles et commandes.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
-        "help_after": "Après new-game : /cmd cmd list",
-        "tag_purge": "purge",
-        "purge_need": "Efface TOUS les messages de n'importe qui. Confirme : /cmd purge all",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+        "help_after": "Après new-game : /cmd cmd list. Admin : /cmd clear all vide le groupe.",
+        "tag_purge": "clear",
+        "purge_need": "Efface TOUS les messages de n'importe qui. Confirme : /cmd clear all",
         "purge_work": "Suppression de tous les messages…",
         "purge_ok": "Fait. Supprimés ~{n} (ignorés {fail}).",
         "purge_denied": "Le bot doit être admin avec le droit Supprimer des messages.",
@@ -102,6 +106,9 @@ _MSG = {
         "revoke_env": "{who} reste admin (ADMIN_TELEGRAM_IDS).",
         "revoke_bad": "indique @user ou un id : /cmd revoke 123",
         "webhook_empty": "Le GM n'a renvoyé aucun corps.",
+        "rule_ok": "Règle ajoutée : {line}",
+        "limit_ok": "Limite ajoutée : {line}",
+        "new_game_empty": "Grok a reçu new-game, mais le webhook n'envoie pas le récit. Ajoute XAI_API_KEY (console.x.ai).",
         "gm_error": "Le GM n'a pas répondu ({err}).",
         "dice_bad": "Dé invalide : {expr}",
         "lang_local": "Langue de la table : {lang}",
@@ -120,10 +127,10 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Ein Admin beschreibt das Spiel; Grok erfindet Regeln und Befehle.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
-        "help_after": "Nach new-game: /cmd cmd list",
-        "tag_purge": "purge",
-        "purge_need": "Löscht ALLE Nachrichten von jedem. Bestätigen: /cmd purge all",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+        "help_after": "Nach new-game: /cmd cmd list. Admin: /cmd clear all leert die Gruppe.",
+        "tag_purge": "clear",
+        "purge_need": "Löscht ALLE Nachrichten von jedem. Bestätigen: /cmd clear all",
         "purge_work": "Lösche alle Nachrichten…",
         "purge_ok": "Fertig. Gelöscht ~{n} (übersprungen {fail}).",
         "purge_denied": "Bot muss Admin mit Recht Nachrichten löschen sein.",
@@ -143,6 +150,9 @@ _MSG = {
         "revoke_env": "{who} bleibt Admin (ADMIN_TELEGRAM_IDS).",
         "revoke_bad": "gib @user oder eine id: /cmd revoke 123",
         "webhook_empty": "Der GM hat keinen Body zurückgegeben.",
+        "rule_ok": "Regel hinzugefügt: {line}",
+        "limit_ok": "Limit hinzugefügt: {line}",
+        "new_game_empty": "Grok hat new-game empfangen, aber der Webhook liefert keinen Text. XAI_API_KEY in .env (console.x.ai).",
         "gm_error": "Der GM hat nicht geantwortet ({err}).",
         "dice_bad": "Ungültiger Würfel: {expr}",
         "lang_local": "Sprache des Tisches: {lang}",
@@ -161,10 +171,10 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "An admin describes the game; Grok invents rules and commands.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
-        "help_after": "After new-game: /cmd cmd list",
-        "tag_purge": "purge",
-        "purge_need": "Deletes EVERY message from anyone. Confirm: /cmd purge all",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear",
+        "help_after": "After new-game: /cmd cmd list. Admin: /cmd clear all wipes the group.",
+        "tag_purge": "clear",
+        "purge_need": "Deletes EVERY message from anyone. Confirm: /cmd clear all",
         "purge_work": "Deleting every message…",
         "purge_ok": "Done. Deleted ~{n} (skipped {fail}).",
         "purge_denied": "The bot must be admin with Delete messages permission.",
@@ -184,6 +194,9 @@ _MSG = {
         "revoke_env": "{who} remains admin (ADMIN_TELEGRAM_IDS).",
         "revoke_bad": "give @user or a numeric id: /cmd revoke 123",
         "webhook_empty": "The GM returned no body.",
+        "rule_ok": "Rule added: {line}",
+        "limit_ok": "Limit added: {line}",
+        "new_game_empty": "Grok got new-game, but the webhook does not send the story. Add XAI_API_KEY in .env (console.x.ai).",
         "gm_error": "The GM did not respond ({err}).",
         "dice_bad": "Invalid dice: {expr}",
         "lang_local": "Table language: {lang}",
@@ -196,8 +209,8 @@ _MSG = {
 }
 
 
-def _m(lang: str, key: str, **kwargs: Any) -> str:
-    pack = _MSG[lang] if lang in _MSG else _MSG["en"]
+def _m(locale: str, key: str, **kwargs: Any) -> str:
+    pack = _MSG[locale] if locale in _MSG else _MSG["en"]
     return pack[key].format(**kwargs)
 
 
@@ -232,6 +245,39 @@ def local_status(state: TableState) -> str:
         f"{_m(lang, 'lbl_pcs')}  {players}",
     ]
     return card(title, lines)
+
+
+def _empty_gm(
+    ctx: BridgeContext,
+    state: TableState,
+    verb: str,
+    payload: str,
+    lang: str,
+) -> str:
+    """Grok Automations often return 202 with no body. Keep the table moving."""
+    if verb == "status":
+        ctx.store.save(state)
+        return local_status(state)
+    if verb == "lang":
+        ctx.store.save(state)
+        return _notice(lang, "tag_lang", _m(lang, "lang_local", lang=state.lang))
+    if verb == "rules":
+        line = payload.strip()
+        if line:
+            state.rules.append(line)
+        ctx.store.save(state)
+        return _notice(lang, "tag_ok", _m(lang, "rule_ok", line=line or _m(lang, "none")))
+    if verb == "limit":
+        line = payload.strip()
+        if line:
+            state.limits.append(line)
+        ctx.store.save(state)
+        return _notice(lang, "tag_ok", _m(lang, "limit_ok", line=line or _m(lang, "none")))
+    if verb == "new-game":
+        ctx.store.save(state)
+        return _notice(lang, "tag_err", _m(lang, "new_game_empty"))
+    ctx.store.save(state)
+    return _notice(lang, "tag_err", _m(lang, "webhook_empty"))
 
 
 @dataclass(frozen=True)
@@ -392,12 +438,7 @@ async def process_command(ctx: BridgeContext, text: str) -> str | PurgeAll | Non
 
     gm_reply = await _call_gm(ctx, state, verb, payload, is_adm, dice=None)
     if gm_reply is None:
-        ctx.store.save(state)
-        if verb == "status":
-            return local_status(state)
-        if verb == "lang":
-            return _notice(lang, "tag_lang", _m(lang, "lang_local", lang=state.lang))
-        return _notice(lang, "tag_err", _m(lang, "webhook_empty"))
+        return _empty_gm(ctx, state, verb, payload, lang)
 
     apply_reply(state, gm_reply)
     ctx.store.save(state)
@@ -499,13 +540,28 @@ async def _chat_admins(
     return ids, creator_id
 
 
+def _remember(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int) -> None:
+    buckets: dict[int, deque[int]] = context.bot_data.setdefault(
+        "seen_ids", defaultdict(lambda: deque(maxlen=500))
+    )
+    if chat_id not in buckets:
+        buckets[chat_id] = deque(maxlen=500)
+    buckets[chat_id].append(int(message_id))
+
+
+def _seen_ids(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> list[int]:
+    buckets = context.bot_data.get("seen_ids") or {}
+    return list(buckets.get(chat_id) or [])
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     user = update.effective_user
     chat = update.effective_chat
     if message is None or user is None or chat is None:
         return
-    text = message.text
+    _remember(context, chat.id, message.message_id)
+    text = message.text or message.caption
     if not text:
         return
     if parse_cmd(text) is None:
@@ -543,15 +599,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def _execute_purge(message: Any, context: ContextTypes.DEFAULT_TYPE, lang: str) -> None:
+    chat_id = message.chat_id
+    if not await bot_can_delete(context.bot, chat_id):
+        await _publish(
+            message,
+            _notice(lang, "tag_stop", _m(lang, "purge_denied")),
+            reply=False,
+        )
+        return
     work = _notice(lang, "tag_purge", _m(lang, "purge_work"))
     progress = None
     try:
-        progress = await message.reply_text(
-            as_html_pre(work), parse_mode=ParseMode.HTML
+        progress = await context.bot.send_message(
+            chat_id=chat_id,
+            text=as_html_pre(work),
+            parse_mode=ParseMode.HTML,
         )
+        _remember(context, chat_id, progress.message_id)
     except Exception:
         log.debug("could not post purge progress", exc_info=True)
-    stats = await purge_upto(context.bot, message.chat_id, int(message.message_id))
+    extra = _seen_ids(context, chat_id)
+    stats = await purge_upto(
+        context.bot,
+        chat_id,
+        int(message.message_id),
+        extra_ids=extra,
+    )
     if progress is not None:
         try:
             await progress.delete()
@@ -576,15 +649,18 @@ async def _publish(message: Any, say: str, *, reply: bool = True) -> None:
     chat_id = message.chat_id
     for chunk in _chunk(say, TG_LIMIT - 24):
         html = as_html_pre(chunk)
+        sent = None
         if reply:
             try:
-                await message.reply_text(html, parse_mode=ParseMode.HTML)
-                continue
+                sent = await message.reply_text(html, parse_mode=ParseMode.HTML)
             except Exception as exc:
                 if "not found" not in str(exc).lower():
                     raise
                 log.debug("reply target gone, sending standalone: %s", exc)
-        await bot.send_message(chat_id=chat_id, text=html, parse_mode=ParseMode.HTML)
+        if sent is None:
+            await bot.send_message(
+                chat_id=chat_id, text=html, parse_mode=ParseMode.HTML
+            )
 
 
 def _chunk(text: str, limit: int) -> list[str]:
@@ -609,5 +685,5 @@ def build_application(config: Config, store: Store, gm: GameMaster) -> Applicati
     application.bot_data["config"] = config
     application.bot_data["store"] = store
     application.bot_data["gm"] = gm
-    application.add_handler(MessageHandler(filters.TEXT, handle_message))
+    application.add_handler(MessageHandler(filters.ALL, handle_message))
     return application

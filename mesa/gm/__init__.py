@@ -12,5 +12,7 @@ def create_gm(config: Config) -> GameMaster:
             url=config.webhook_url,
             secret=config.webhook_secret,
             reply_mode=config.webhook_reply,
+            xai_api_key=config.xai_api_key,
+            xai_model=config.xai_model,
         )
     return MockGM()

@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from mesa.gm.base import SCHEMA_REPLY
+from mesa.gm.xai import XaiGM
 
 HEADER_ID = "webhook-id"
 HEADER_TIMESTAMP = "webhook-timestamp"
@@ -62,10 +63,18 @@ def verify(
 
 
 class WebhookGM:
-    def __init__(self, url: str, secret: str, reply_mode: str = "http") -> None:
+    def __init__(
+        self,
+        url: str,
+        secret: str,
+        reply_mode: str = "http",
+        xai_api_key: str = "",
+        xai_model: str = "grok-4.6",
+    ) -> None:
         self.url = url
         self.secret = secret
         self.reply_mode = reply_mode
+        self._xai = XaiGM(xai_api_key, xai_model) if xai_api_key else None
 
     async def reply(self, request: dict[str, Any]) -> dict[str, Any] | None:
         if not self.url:
@@ -85,6 +94,18 @@ class WebhookGM:
             response = await client.post(self.url, content=body, headers=headers)
             response.raise_for_status()
             raw = response.content
+        parsed = self._parse_http_body(request, raw)
+        if parsed is not None:
+            return parsed
+        # Automations return 202 with an empty body. Grok still has to speak
+        # in the group, so fall through to the synchronous API when keyed.
+        if self._xai is not None:
+            return await self._xai.reply(request)
+        return None
+
+    def _parse_http_body(
+        self, request: dict[str, Any], raw: bytes
+    ) -> dict[str, Any] | None:
         if not raw:
             return None
         try:

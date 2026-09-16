@@ -1,85 +1,42 @@
-# mesa — open-grammar Telegram table
+![A knight facing a dragon over a table of chess, Parchís, Othello, cards and dice](docs/images/hero-table.jpg)
 
-The game is **not** in this Python. A group admin describes the table in natural language; Grok (Agent Bot webhook) invents rules, commands and limits. This process only parses `/cmd`, stores opaque JSON per chat, checks admins, optionally rolls dice the GM requested, and publishes `say`.
+[**EN**](README.md) · [ES](README.ES.md) · [FR](README.FR.md) · [DE](README.DE.md)
 
-One process:
+# Grok Multi Game platform (telegram version)
 
-```
-python -m mesa.main
-```
+This is an experiment with a ridiculous premise and a wholesome excuse.
 
-## Setup
+**Can an agent bot be the Dungeon Master?** Not a rules engine with 400 pages of errata. A brain. Tonight it runs a dragon hunt. Tomorrow it deals 21. On Saturday it becomes Parchís with extra spite. Same group, same friends, new table.
 
-Python 3.10+.
+The channel is **Telegram**, on purpose. Kids already have it. Parents already have it. Nobody has to install *Yet Another Game Client 3.2 (beta)* and create an account named `xXDarkWizard2009Xx`. If the phone can ping a group chat, it can sit at this table.
 
-```
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-```
-
-Fill `TELEGRAM_BOT_TOKEN` from [@BotFather](https://t.me/BotFather). Leave `GM_BACKEND=mock` until the Agent webhook exists.
-
-### BotFather
-
-1. `/newbot` — copy the token into `.env`.
-2. `/setprivacy` — **Disable**. Otherwise the bot only sees slash commands and the `cmd …` alias in groups will not work.
-3. Add the bot to a group **you** create. The app never creates Telegram groups.
-4. Make the bot a group admin so it can read `getChatAdministrators` (the group creator is then an admin of the table).
-
-Optional: `ADMIN_TELEGRAM_IDS=123,456` — those user ids are always table admins.
-
-## Grammar
+That is the old internet sneaking back in through a modern door. Before graphics cards had more fans than a football stadium, people played on **BBS boards**, ASCII dungeons, and MUDs where a dragon was three characters of fire and a lot of imagination:
 
 ```
-/cmd <verb> [payload...]
+  /\
+ /  \    "You hear dice in the dark."
+< DM >
+ \  /
+  \/
 ```
 
-In a group with privacy off, the same line without the slash also works: `cmd <verb> [payload]`.
+Same energy. Type a command. Get a story. Argue about whether the orc really had line of sight. The felt is a chat window; the master is Grok.
 
-`verb` is `[a-z0-9-]{1,32}`. Everything after it is free text.
+I built it **for fun, for my son**, so he can drag his friends into a game without a rulebook, a shop, or a “minimum 40 GB download.” One group. One bot. An adult hits `/cmd new-game …` in plain language. Grok invents the rest. When they are done wrecking the lighthouse / the deck / the kingdom, `/cmd clear all` sweeps the crumbs like a very obedient tavern keeper.
 
-System verbs (always exist): `help`, `lang`, `new-game`, `rules`, `limit`, `cmd`, `status`, `reset`, `whoami`, `grant`, `revoke`.
+If it works, we get a pocket tavern that fits in a schoolbag. If it does not, we still get a funny evening and some ASCII cards. Either way: the knight stays on the box art, the kids stay on Telegram, and the grown-up does not have to explain Steam to a twelve-year-old at 22:17.
 
-Any other verb (`act`, `join`, `guess`, …) is a **game** verb. The bridge forwards it only if the last GM `new-game` published it in `commands`. A second `new-game` replaces that list; the previous game is gone.
+**Want to open your own table?** The boring (necessary) bits are in **[SETUP.md](SETUP.md)**.
 
-## Try it (mock GM)
+---
 
-In the group, as admin:
-
-```
-/cmd lang es
-/cmd new-game juego de rol de suspense en un tren, 4 jugadores, dados solo en combates, sin magia
-/cmd cmd list
-/cmd rules el tren no puede detenerse hasta el final
-/cmd limit cada acción máximo 2 frases
-/cmd new-game ahora es un concurso de acertijos sobre el mar, pistas de pago
-```
-
-After the second `new-game` the command list is riddle verbs (`join`, `guess`, `hint`, `next`), not role-play verbs.
-
-A non-admin:
+A player’s entire spellbook, more or less:
 
 ```
+/cmd new-game  …describe the game like you would to a patient uncle
 /cmd join
-/cmd act miro por la ventanilla
+/cmd cmd list
+/cmd clear all     (adults only: wipe the group)
 ```
 
-`join` is rejected while the table is still lobby (no `new-game` yet). Plain chat (`buenos días`) is ignored and never reaches the GM.
-
-## Webhook GM (later)
-
-`GM_BACKEND=webhook` plus `WEBHOOK_URL` and `WEBHOOK_SECRET`. Requests are `schema: mesa.v1`, signed with [Standard Webhooks](https://www.standardwebhooks.com/) HMAC (`webhook-id`, `webhook-timestamp`, `webhook-signature: v1,…`).
-
-`WEBHOOK_REPLY=http`: if the POST returns JSON `mesa.v1.reply` or plain text, the bridge publishes it. An empty body gets a short notice in the group.
-
-v0 always publishes `say`. If the reply includes `dice_request`, the bridge rolls and calls back with `verb=dice-result`.
-
-## Tests
-
-```
-pytest
-```
-
-No calls to `api.x.ai`. No hardcoded characters, genres, trivia engine or `/elegir`.
+Everything else — `otra`, `planto`, `act`, `guess`, `cast` — is invented by Grok for *that* night’s game. Tomorrow the verbs will be different. That is the feature, not a bug. The 90s compilation cartridge on the shelf never promised you would play the same title twice.

@@ -17,6 +17,8 @@ class Config:
     webhook_url: str
     webhook_secret: str
     webhook_reply: str
+    xai_api_key: str
+    xai_model: str
     data_dir: Path
 
 
@@ -43,5 +45,7 @@ def load_config(env_file: Path | None = None) -> Config:
         webhook_url=(os.getenv("WEBHOOK_URL") or "").strip(),
         webhook_secret=(os.getenv("WEBHOOK_SECRET") or "").strip(),
         webhook_reply=(os.getenv("WEBHOOK_REPLY") or "http").strip().lower(),
+        xai_api_key=(os.getenv("XAI_API_KEY") or "").strip(),
+        xai_model=(os.getenv("XAI_MODEL") or "grok-4.6").strip(),
         data_dir=data_dir,
     )

@@ -33,7 +33,6 @@ SYSTEM_VERBS = frozenset(
         "whoami",
         "grant",
         "revoke",
-        "purge",
         "clear",
     }
 )
@@ -47,12 +46,11 @@ ADMIN_VERBS = frozenset(
         "reset",
         "grant",
         "revoke",
-        "purge",
         "clear",
     }
 )
 
-PURGE_VERBS = frozenset({"purge", "clear"})
+PURGE_VERBS = frozenset({"clear"})
 PURGE_CONFIRM = frozenset({"all", "todo", "todos", "tous", "alle", "everything"})
 
 SUPPORTED_LANGS = ("es", "fr", "de", "en")
