@@ -5,6 +5,7 @@ from typing import Any
 
 from mesa.gm.base import SCHEMA_REPLY
 from mesa.parse import SYSTEM_VERBS
+from mesa.skin import DIV, bullets, card
 
 _RIDDLE_RE = re.compile(
     r"acertijo|acertijos|enigma|enigmas|\briddle|\briddles|\bpuzzle|\bpuzzles",
@@ -79,10 +80,10 @@ _HELP = {
 }
 
 _SYSTEM_HELP = {
-    "es": "verbos de sistema (siempre): help, lang, new-game, rules, limit, cmd, status, reset, whoami, grant, revoke",
-    "fr": "verbes système (toujours): help, lang, new-game, rules, limit, cmd, status, reset, whoami, grant, revoke",
-    "de": "Systemverben (immer): help, lang, new-game, rules, limit, cmd, status, reset, whoami, grant, revoke",
-    "en": "system verbs (always): help, lang, new-game, rules, limit, cmd, status, reset, whoami, grant, revoke",
+    "es": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+    "fr": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+    "de": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+    "en": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
 }
 
 
@@ -165,134 +166,116 @@ def _t(locale: str, key: str, **kwargs: Any) -> str:
 
 _SAY = {
     "es": {
-        "new_game": (
-            "Nueva mesa: {title}.\n"
-            "Brief: {brief}\n"
-            "Reglas extraídas: {rules}\n"
-            "Usa /cmd cmd list para ver las acciones."
-        ),
+        "tag_new": "nueva",
+        "tag_cmds": "cmds",
+        "tag_ok": "ok",
+        "tag_lang": "lang",
+        "tag_stop": "stop",
+        "tag_reset": "reset",
+        "tag_join": "join",
+        "tag_dice": "dado",
+        "lbl_rules": "reglas",
+        "lbl_limits": "límites",
         "rules": "Regla añadida: {line}",
         "limit": "Límite añadido: {line}",
         "lang": "Idioma de la mesa: {lang}",
-        "cmd_list": "Comandos de juego:\n{game}\n\n{system}",
-        "no_game_cmds": "(ninguno todavía — un admin debe /cmd new-game)",
-        "status": (
-            "Mesa: {title}\n"
-            "Fase: {phase} · lang: {lang}\n"
-            "Brief: {brief}\n"
-            "Reglas:\n{rules}\n"
-            "Límites:\n{limits}\n"
-            "Comandos: {commands}"
-        ),
+        "no_game_cmds": "ninguno — admin: /cmd new-game",
         "none": "(ninguno)",
         "reset": "Mesa cerrada. Lobby vacío.",
-        "unknown": "Comando desconocido: /cmd {verb}\nComandos actuales: {list}",
-        "echo": "{name}: /cmd {verb} {payload}".strip(),
+        "unknown": "desconocido: /cmd {verb}",
+        "unknown_list": "ahora: {list}",
         "join": "{name} se sienta a la mesa.",
         "dice": "Tirada {detail}.",
         "empty": "(sin payload)",
+        "hint_list": "/cmd cmd list",
     },
     "fr": {
-        "new_game": (
-            "Nouvelle table : {title}.\n"
-            "Brief : {brief}\n"
-            "Règles extraites : {rules}\n"
-            "Utilise /cmd cmd list pour voir les actions."
-        ),
+        "tag_new": "nouvelle",
+        "tag_cmds": "cmds",
+        "tag_ok": "ok",
+        "tag_lang": "lang",
+        "tag_stop": "stop",
+        "tag_reset": "reset",
+        "tag_join": "join",
+        "tag_dice": "dé",
+        "lbl_rules": "règles",
+        "lbl_limits": "limites",
         "rules": "Règle ajoutée : {line}",
         "limit": "Limite ajoutée : {line}",
         "lang": "Langue de la table : {lang}",
-        "cmd_list": "Commandes de jeu :\n{game}\n\n{system}",
-        "no_game_cmds": "(aucune — un admin doit /cmd new-game)",
-        "status": (
-            "Table : {title}\n"
-            "Phase : {phase} · lang : {lang}\n"
-            "Brief : {brief}\n"
-            "Règles :\n{rules}\n"
-            "Limites :\n{limits}\n"
-            "Commandes : {commands}"
-        ),
+        "no_game_cmds": "aucune — admin : /cmd new-game",
         "none": "(aucun)",
         "reset": "Table fermée. Lobby vide.",
-        "unknown": "Commande inconnue : /cmd {verb}\nCommandes actuelles : {list}",
-        "echo": "{name} : /cmd {verb} {payload}",
+        "unknown": "inconnue : /cmd {verb}",
+        "unknown_list": "maintenant : {list}",
         "join": "{name} s'assoit à la table.",
         "dice": "Jet {detail}.",
         "empty": "(sans payload)",
+        "hint_list": "/cmd cmd list",
     },
     "de": {
-        "new_game": (
-            "Neuer Tisch: {title}.\n"
-            "Brief: {brief}\n"
-            "Extrahierte Regeln: {rules}\n"
-            "Mit /cmd cmd list siehst du die Aktionen."
-        ),
+        "tag_new": "neu",
+        "tag_cmds": "cmds",
+        "tag_ok": "ok",
+        "tag_lang": "lang",
+        "tag_stop": "stop",
+        "tag_reset": "reset",
+        "tag_join": "join",
+        "tag_dice": "wurf",
+        "lbl_rules": "regeln",
+        "lbl_limits": "limits",
         "rules": "Regel hinzugefügt: {line}",
         "limit": "Limit hinzugefügt: {line}",
         "lang": "Sprache des Tisches: {lang}",
-        "cmd_list": "Spielbefehle:\n{game}\n\n{system}",
-        "no_game_cmds": "(noch keine — ein Admin muss /cmd new-game)",
-        "status": (
-            "Tisch: {title}\n"
-            "Phase: {phase} · lang: {lang}\n"
-            "Brief: {brief}\n"
-            "Regeln:\n{rules}\n"
-            "Limits:\n{limits}\n"
-            "Befehle: {commands}"
-        ),
+        "no_game_cmds": "keine — Admin: /cmd new-game",
         "none": "(keine)",
         "reset": "Tisch geschlossen. Leere Lobby.",
-        "unknown": "Unbekannter Befehl: /cmd {verb}\nAktuelle Befehle: {list}",
-        "echo": "{name}: /cmd {verb} {payload}",
+        "unknown": "unbekannt: /cmd {verb}",
+        "unknown_list": "jetzt: {list}",
         "join": "{name} setzt sich an den Tisch.",
         "dice": "Wurf {detail}.",
         "empty": "(kein Payload)",
+        "hint_list": "/cmd cmd list",
     },
     "en": {
-        "new_game": (
-            "New table: {title}.\n"
-            "Brief: {brief}\n"
-            "Extracted rules: {rules}\n"
-            "Use /cmd cmd list to see actions."
-        ),
+        "tag_new": "new",
+        "tag_cmds": "cmds",
+        "tag_ok": "ok",
+        "tag_lang": "lang",
+        "tag_stop": "stop",
+        "tag_reset": "reset",
+        "tag_join": "join",
+        "tag_dice": "dice",
+        "lbl_rules": "rules",
+        "lbl_limits": "limits",
         "rules": "Rule added: {line}",
         "limit": "Limit added: {line}",
         "lang": "Table language: {lang}",
-        "cmd_list": "Game commands:\n{game}\n\n{system}",
-        "no_game_cmds": "(none yet — an admin must /cmd new-game)",
-        "status": (
-            "Table: {title}\n"
-            "Phase: {phase} · lang: {lang}\n"
-            "Brief: {brief}\n"
-            "Rules:\n{rules}\n"
-            "Limits:\n{limits}\n"
-            "Commands: {commands}"
-        ),
+        "no_game_cmds": "none yet — admin: /cmd new-game",
         "none": "(none)",
         "reset": "Table closed. Empty lobby.",
-        "unknown": "Unknown command: /cmd {verb}\nCurrent commands: {list}",
-        "echo": "{name}: /cmd {verb} {payload}",
+        "unknown": "unknown: /cmd {verb}",
+        "unknown_list": "now: {list}",
         "join": "{name} sits at the table.",
         "dice": "Roll {detail}.",
         "empty": "(no payload)",
+        "hint_list": "/cmd cmd list",
     },
 }
 
 
 def format_command_list(commands: list[dict[str, str]], lang: str) -> str:
+    lines: list[str] = []
     if not commands:
-        game = _t(lang, "no_game_cmds")
+        lines.append(_t(lang, "no_game_cmds"))
     else:
-        lines = []
         for item in commands:
             verb = item.get("verb", "")
             help_text = item.get("help", "")
-            if help_text:
-                lines.append(f"  /cmd {verb} — {help_text}")
-            else:
-                lines.append(f"  /cmd {verb}")
-        game = "\n".join(lines)
-    return _t(lang, "cmd_list", game=game, system=_SYSTEM_HELP[lang if lang in _SYSTEM_HELP else "en"])
+            lines.append(f"{verb}  {help_text}".strip() if help_text else verb)
+    lines.append(DIV)
+    lines.append(_SYSTEM_HELP[lang if lang in _SYSTEM_HELP else "en"])
+    return card(_t(lang, "tag_cmds"), lines)
 
 
 def current_verb_list(commands: list[dict[str, str]]) -> str:
@@ -319,12 +302,15 @@ class MockGM:
             rules_txt = "; ".join(rules) if rules else _t(lang, "none")
             return _reply(
                 request,
-                _t(
-                    lang,
-                    "new_game",
-                    title=title,
-                    brief=payload or _t(lang, "empty"),
-                    rules=rules_txt,
+                card(
+                    _t(lang, "tag_new"),
+                    [
+                        title,
+                        payload or _t(lang, "empty"),
+                        DIV,
+                        f"{_t(lang, 'lbl_rules')}  {rules_txt}",
+                        _t(lang, "hint_list"),
+                    ],
                 ),
                 phase="playing",
                 title=title,
@@ -341,7 +327,10 @@ class MockGM:
                 rules.append(line)
             return _reply(
                 request,
-                _t(lang, "rules", line=line or _t(lang, "empty")),
+                card(
+                    _t(lang, "tag_ok"),
+                    [_t(lang, "rules", line=line or _t(lang, "empty"))],
+                ),
                 rules=rules,
             )
 
@@ -352,7 +341,10 @@ class MockGM:
                 limits.append(line)
             return _reply(
                 request,
-                _t(lang, "limit", line=line or _t(lang, "empty")),
+                card(
+                    _t(lang, "tag_ok"),
+                    [_t(lang, "limit", line=line or _t(lang, "empty"))],
+                ),
                 limits=limits,
             )
 
@@ -361,7 +353,10 @@ class MockGM:
             say_lang = new_lang if new_lang in _SAY else lang
             return _reply(
                 request,
-                _t(say_lang, "lang", lang=new_lang),
+                card(
+                    _t(say_lang, "tag_lang"),
+                    [_t(say_lang, "lang", lang=new_lang)],
+                ),
                 lang=new_lang,
             )
 
@@ -377,7 +372,7 @@ class MockGM:
         if verb == "reset":
             return _reply(
                 request,
-                _t(lang, "reset"),
+                card(_t(lang, "tag_reset"), [_t(lang, "reset")]),
                 phase="lobby",
                 title="",
                 commands=[],
@@ -389,7 +384,10 @@ class MockGM:
         if verb == "dice-result":
             dice = request.get("dice") or {}
             detail = dice.get("detail") or dice.get("expr") or ""
-            return _reply(request, _t(lang, "dice", detail=detail))
+            return _reply(
+                request,
+                card(_t(lang, "tag_dice"), [_t(lang, "dice", detail=detail)]),
+            )
 
         known = {
             str(c.get("verb") or "").lower()
@@ -398,39 +396,46 @@ class MockGM:
         if verb not in known:
             return _reply(
                 request,
-                _t(
-                    lang,
-                    "unknown",
-                    verb=verb,
-                    list=current_verb_list(list(table.get("commands") or [])),
+                card(
+                    _t(lang, "tag_stop"),
+                    [
+                        _t(lang, "unknown", verb=verb),
+                        _t(
+                            lang,
+                            "unknown_list",
+                            list=current_verb_list(list(table.get("commands") or [])),
+                        ),
+                    ],
                 ),
             )
 
         name = _user_name(request)
         if verb == "join":
-            say = _t(lang, "join", name=name)
+            say = card(_t(lang, "tag_join"), [_t(lang, "join", name=name)])
         else:
-            extra = payload if payload else ""
-            say = _t(lang, "echo", name=name, verb=verb, payload=extra).strip()
+            extra = payload if payload else "·"
+            say = card(verb, [name, extra])
         return _reply(request, say)
 
 
 def _status_say(table: dict[str, Any], lang: str) -> str:
-    rules = table.get("rules") or []
-    limits = table.get("limits") or []
+    rules = [str(r) for r in (table.get("rules") or [])]
+    limits = [str(x) for x in (table.get("limits") or [])]
     commands = table.get("commands") or []
     none = _t(lang, "none")
-    rules_txt = "\n".join(f"- {r}" for r in rules) if rules else none
-    limits_txt = "\n".join(f"- {x}" for x in limits) if limits else none
     cmd_txt = ", ".join(c.get("verb", "") for c in commands) or none
-    return _t(
-        lang,
-        "status",
-        title=table.get("title") or none,
-        phase=table.get("phase") or "lobby",
-        lang=lang,
-        brief=table.get("brief") or none,
-        rules=rules_txt,
-        limits=limits_txt,
-        commands=cmd_txt,
+    title = str(table.get("title") or none)
+    return card(
+        title,
+        [
+            f"{table.get('phase') or 'lobby'} · {lang}",
+            str(table.get("brief") or none),
+            DIV,
+            _t(lang, "lbl_rules"),
+            *bullets(rules, none),
+            _t(lang, "lbl_limits"),
+            *bullets(limits, none),
+            DIV,
+            f"cmds  {cmd_txt}",
+        ],
     )

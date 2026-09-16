@@ -5,15 +5,24 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from telegram import Update
-from telegram.constants import ChatType
+from telegram.constants import ChatType, ParseMode
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from mesa import admin as admin_mod
 from mesa.config import Config
 from mesa.dice import roll as roll_dice
 from mesa.gm.base import GameMaster, apply_reply, build_request
-from mesa.parse import ADMIN_VERBS, SUPPORTED_LANGS, SYSTEM_VERBS, parse_cmd
+from mesa.parse import (
+    ADMIN_VERBS,
+    PURGE_CONFIRM,
+    PURGE_VERBS,
+    SUPPORTED_LANGS,
+    SYSTEM_VERBS,
+    parse_cmd,
+)
+from mesa.skin import DIV, as_html_pre, bullets, card
 from mesa.store import Store, TableState
+from mesa.telegram.purge import purge_upto
 
 log = logging.getLogger(__name__)
 
@@ -21,162 +30,168 @@ TG_LIMIT = 4000
 
 _MSG = {
     "es": {
-        "help": (
-            "Mesa de gramática abierta. Un admin describe el juego; Grok inventa "
-            "reglas y comandos.\n"
-            "Gramática: /cmd <verbo> [texto…]\n"
-            "Sistema: help, lang, new-game, rules, limit, cmd list, status, "
-            "reset, whoami, grant, revoke.\n"
-            "Tras /cmd new-game, /cmd cmd list muestra las acciones de ESA mesa."
-        ),
-        "whoami": "{name}\nid: {id}\nadmin: {admin}",
+        "tag_help": "ayuda",
+        "tag_you": "tú",
+        "tag_stop": "stop",
+        "tag_ok": "ok",
+        "tag_mesa": "mesa",
+        "tag_lang": "lang",
+        "tag_err": "err",
+        "help_intro": "Un admin describe el juego; Grok inventa reglas y comandos.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+        "help_after": "Tras new-game: /cmd cmd list",
+        "tag_purge": "purge",
+        "purge_need": "Borra TODOS los mensajes de cualquiera. Confirma: /cmd purge all",
+        "purge_work": "Borrando todos los mensajes…",
+        "purge_ok": "Listo. Borrados ~{n} (omitidos {fail}).",
+        "purge_denied": "El bot debe ser admin con permiso Borrar mensajes.",
+        "purge_none": "Nada que borrar.",
         "yes": "sí",
         "no": "no",
         "not_admin": "Solo un admin de la mesa puede usar /cmd {verb}.",
-        "unknown": "Comando desconocido: /cmd {verb}\nComandos actuales: {list}",
+        "unknown": "desconocido: /cmd {verb}",
+        "unknown_list": "ahora: {list}",
         "bad_lang": "Idioma no válido. Usa: es, fr, de, en.",
-        "grant_ok": "Admin de mesa añadido: {who}",
-        "grant_already": "Ya era admin de mesa: {who}",
-        "grant_bad": "Indica @usuario o un id numérico: /cmd grant @ana",
-        "revoke_ok": "Admin de mesa revocado: {who}",
-        "revoke_missing": "No era admin de mesa: {who}",
+        "grant_ok": "admin añadido: {who}",
+        "grant_already": "ya era admin: {who}",
+        "grant_bad": "usa @usuario o un id: /cmd grant @ana",
+        "revoke_ok": "admin revocado: {who}",
+        "revoke_missing": "no era admin: {who}",
         "revoke_creator": "No se puede revocar al creador del grupo.",
-        "revoke_env": "{who} sigue siendo admin (ADMIN_TELEGRAM_IDS).",
-        "revoke_bad": "Indica @usuario o un id numérico: /cmd revoke 123",
-        "webhook_empty": "El GM no devolvió cuerpo. Mesa actualizada en local si aplica.",
+        "revoke_env": "{who} sigue admin (ADMIN_TELEGRAM_IDS).",
+        "revoke_bad": "usa @usuario o un id: /cmd revoke 123",
+        "webhook_empty": "El GM no devolvió cuerpo.",
         "gm_error": "El GM no respondió ({err}).",
-        "dice_bad": "El GM pidió un dado inválido: {expr}",
+        "dice_bad": "Dado inválido: {expr}",
         "lang_local": "Idioma de la mesa: {lang}",
-        "yes_admin": "sí",
-        "no_admin": "no",
-        "status": (
-            "Mesa: {title}\n"
-            "Fase: {phase} · lang: {lang}\n"
-            "Brief: {brief}\n"
-            "Reglas:\n{rules}\n"
-            "Límites:\n{limits}\n"
-            "Comandos: {commands}\n"
-            "Jugadores: {players}"
-        ),
+        "lbl_rules": "reglas",
+        "lbl_limits": "límites",
+        "lbl_cmds": "cmds",
+        "lbl_pcs": "pcs",
         "none": "(ninguno)",
-        "cmd_need_list": "Usa /cmd cmd list",
     },
     "fr": {
-        "help": (
-            "Table à grammaire ouverte. Un admin décrit le jeu ; Grok invente "
-            "règles et commandes.\n"
-            "Grammaire : /cmd <verbe> [texte…]\n"
-            "Système : help, lang, new-game, rules, limit, cmd list, status, "
-            "reset, whoami, grant, revoke.\n"
-            "Après /cmd new-game, /cmd cmd list montre les actions de CETTE table."
-        ),
-        "whoami": "{name}\nid : {id}\nadmin : {admin}",
+        "tag_help": "aide",
+        "tag_you": "toi",
+        "tag_stop": "stop",
+        "tag_ok": "ok",
+        "tag_mesa": "table",
+        "tag_lang": "lang",
+        "tag_err": "err",
+        "help_intro": "Un admin décrit le jeu ; Grok invente règles et commandes.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+        "help_after": "Après new-game : /cmd cmd list",
+        "tag_purge": "purge",
+        "purge_need": "Efface TOUS les messages de n'importe qui. Confirme : /cmd purge all",
+        "purge_work": "Suppression de tous les messages…",
+        "purge_ok": "Fait. Supprimés ~{n} (ignorés {fail}).",
+        "purge_denied": "Le bot doit être admin avec le droit Supprimer des messages.",
+        "purge_none": "Rien à supprimer.",
         "yes": "oui",
         "no": "non",
         "not_admin": "Seul un admin de la table peut utiliser /cmd {verb}.",
-        "unknown": "Commande inconnue : /cmd {verb}\nCommandes actuelles : {list}",
+        "unknown": "inconnue : /cmd {verb}",
+        "unknown_list": "maintenant : {list}",
         "bad_lang": "Langue invalide. Utilise : es, fr, de, en.",
-        "grant_ok": "Admin de table ajouté : {who}",
-        "grant_already": "Était déjà admin de table : {who}",
-        "grant_bad": "Indique @user ou un id numérique : /cmd grant @ana",
-        "revoke_ok": "Admin de table révoqué : {who}",
-        "revoke_missing": "N'était pas admin de table : {who}",
+        "grant_ok": "admin ajouté : {who}",
+        "grant_already": "déjà admin : {who}",
+        "grant_bad": "indique @user ou un id : /cmd grant @ana",
+        "revoke_ok": "admin révoqué : {who}",
+        "revoke_missing": "n'était pas admin : {who}",
         "revoke_creator": "On ne peut pas révoquer le créateur du groupe.",
         "revoke_env": "{who} reste admin (ADMIN_TELEGRAM_IDS).",
-        "revoke_bad": "Indique @user ou un id numérique : /cmd revoke 123",
+        "revoke_bad": "indique @user ou un id : /cmd revoke 123",
         "webhook_empty": "Le GM n'a renvoyé aucun corps.",
         "gm_error": "Le GM n'a pas répondu ({err}).",
-        "dice_bad": "Le GM a demandé un dé invalide : {expr}",
+        "dice_bad": "Dé invalide : {expr}",
         "lang_local": "Langue de la table : {lang}",
-        "status": (
-            "Table : {title}\n"
-            "Phase : {phase} · lang : {lang}\n"
-            "Brief : {brief}\n"
-            "Règles :\n{rules}\n"
-            "Limites :\n{limits}\n"
-            "Commandes : {commands}\n"
-            "Joueurs : {players}"
-        ),
+        "lbl_rules": "règles",
+        "lbl_limits": "limites",
+        "lbl_cmds": "cmds",
+        "lbl_pcs": "pcs",
         "none": "(aucun)",
-        "cmd_need_list": "Utilise /cmd cmd list",
     },
     "de": {
-        "help": (
-            "Offene Grammatik-Tisch. Ein Admin beschreibt das Spiel; Grok erfindet "
-            "Regeln und Befehle.\n"
-            "Grammatik: /cmd <verb> [text…]\n"
-            "System: help, lang, new-game, rules, limit, cmd list, status, "
-            "reset, whoami, grant, revoke.\n"
-            "Nach /cmd new-game zeigt /cmd cmd list die Aktionen DIESES Tisches."
-        ),
-        "whoami": "{name}\nid: {id}\nadmin: {admin}",
+        "tag_help": "hilfe",
+        "tag_you": "du",
+        "tag_stop": "stop",
+        "tag_ok": "ok",
+        "tag_mesa": "tisch",
+        "tag_lang": "lang",
+        "tag_err": "err",
+        "help_intro": "Ein Admin beschreibt das Spiel; Grok erfindet Regeln und Befehle.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+        "help_after": "Nach new-game: /cmd cmd list",
+        "tag_purge": "purge",
+        "purge_need": "Löscht ALLE Nachrichten von jedem. Bestätigen: /cmd purge all",
+        "purge_work": "Lösche alle Nachrichten…",
+        "purge_ok": "Fertig. Gelöscht ~{n} (übersprungen {fail}).",
+        "purge_denied": "Bot muss Admin mit Recht Nachrichten löschen sein.",
+        "purge_none": "Nichts zu löschen.",
         "yes": "ja",
         "no": "nein",
         "not_admin": "Nur ein Tisch-Admin darf /cmd {verb} nutzen.",
-        "unknown": "Unbekannter Befehl: /cmd {verb}\nAktuelle Befehle: {list}",
+        "unknown": "unbekannt: /cmd {verb}",
+        "unknown_list": "jetzt: {list}",
         "bad_lang": "Ungültige Sprache. Nutze: es, fr, de, en.",
-        "grant_ok": "Tisch-Admin hinzugefügt: {who}",
-        "grant_already": "War bereits Tisch-Admin: {who}",
-        "grant_bad": "Gib @user oder eine numerische id an: /cmd grant @ana",
-        "revoke_ok": "Tisch-Admin entzogen: {who}",
-        "revoke_missing": "War kein Tisch-Admin: {who}",
+        "grant_ok": "Admin hinzugefügt: {who}",
+        "grant_already": "war bereits Admin: {who}",
+        "grant_bad": "gib @user oder eine id: /cmd grant @ana",
+        "revoke_ok": "Admin entzogen: {who}",
+        "revoke_missing": "war kein Admin: {who}",
         "revoke_creator": "Der Gruppenersteller kann nicht entzogen werden.",
         "revoke_env": "{who} bleibt Admin (ADMIN_TELEGRAM_IDS).",
-        "revoke_bad": "Gib @user oder eine numerische id an: /cmd revoke 123",
+        "revoke_bad": "gib @user oder eine id: /cmd revoke 123",
         "webhook_empty": "Der GM hat keinen Body zurückgegeben.",
         "gm_error": "Der GM hat nicht geantwortet ({err}).",
-        "dice_bad": "Der GM bat um einen ungültigen Würfel: {expr}",
+        "dice_bad": "Ungültiger Würfel: {expr}",
         "lang_local": "Sprache des Tisches: {lang}",
-        "status": (
-            "Tisch: {title}\n"
-            "Phase: {phase} · lang: {lang}\n"
-            "Brief: {brief}\n"
-            "Regeln:\n{rules}\n"
-            "Limits:\n{limits}\n"
-            "Befehle: {commands}\n"
-            "Spieler: {players}"
-        ),
+        "lbl_rules": "regeln",
+        "lbl_limits": "limits",
+        "lbl_cmds": "cmds",
+        "lbl_pcs": "pcs",
         "none": "(keine)",
-        "cmd_need_list": "Nutze /cmd cmd list",
     },
     "en": {
-        "help": (
-            "Open-grammar table. An admin describes the game; Grok invents "
-            "rules and commands.\n"
-            "Grammar: /cmd <verb> [text…]\n"
-            "System: help, lang, new-game, rules, limit, cmd list, status, "
-            "reset, whoami, grant, revoke.\n"
-            "After /cmd new-game, /cmd cmd list shows THIS table's actions."
-        ),
-        "whoami": "{name}\nid: {id}\nadmin: {admin}",
+        "tag_help": "help",
+        "tag_you": "you",
+        "tag_stop": "stop",
+        "tag_ok": "ok",
+        "tag_mesa": "table",
+        "tag_lang": "lang",
+        "tag_err": "err",
+        "help_intro": "An admin describes the game; Grok invents rules and commands.",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke purge",
+        "help_after": "After new-game: /cmd cmd list",
+        "tag_purge": "purge",
+        "purge_need": "Deletes EVERY message from anyone. Confirm: /cmd purge all",
+        "purge_work": "Deleting every message…",
+        "purge_ok": "Done. Deleted ~{n} (skipped {fail}).",
+        "purge_denied": "The bot must be admin with Delete messages permission.",
+        "purge_none": "Nothing to delete.",
         "yes": "yes",
         "no": "no",
         "not_admin": "Only a table admin can use /cmd {verb}.",
-        "unknown": "Unknown command: /cmd {verb}\nCurrent commands: {list}",
+        "unknown": "unknown: /cmd {verb}",
+        "unknown_list": "now: {list}",
         "bad_lang": "Invalid language. Use: es, fr, de, en.",
-        "grant_ok": "Table admin added: {who}",
-        "grant_already": "Already a table admin: {who}",
-        "grant_bad": "Give @user or a numeric id: /cmd grant @ana",
-        "revoke_ok": "Table admin revoked: {who}",
-        "revoke_missing": "Was not a table admin: {who}",
+        "grant_ok": "admin added: {who}",
+        "grant_already": "already admin: {who}",
+        "grant_bad": "give @user or a numeric id: /cmd grant @ana",
+        "revoke_ok": "admin revoked: {who}",
+        "revoke_missing": "was not a table admin: {who}",
         "revoke_creator": "The group creator cannot be revoked.",
         "revoke_env": "{who} remains admin (ADMIN_TELEGRAM_IDS).",
-        "revoke_bad": "Give @user or a numeric id: /cmd revoke 123",
-        "webhook_empty": "The GM returned no body. Local table updated if applicable.",
+        "revoke_bad": "give @user or a numeric id: /cmd revoke 123",
+        "webhook_empty": "The GM returned no body.",
         "gm_error": "The GM did not respond ({err}).",
-        "dice_bad": "The GM asked for an invalid dice expr: {expr}",
+        "dice_bad": "Invalid dice: {expr}",
         "lang_local": "Table language: {lang}",
-        "status": (
-            "Table: {title}\n"
-            "Phase: {phase} · lang: {lang}\n"
-            "Brief: {brief}\n"
-            "Rules:\n{rules}\n"
-            "Limits:\n{limits}\n"
-            "Commands: {commands}\n"
-            "Players: {players}"
-        ),
+        "lbl_rules": "rules",
+        "lbl_limits": "limits",
+        "lbl_cmds": "cmds",
+        "lbl_pcs": "pcs",
         "none": "(none)",
-        "cmd_need_list": "Use /cmd cmd list",
     },
 }
 
@@ -184,6 +199,10 @@ _MSG = {
 def _m(lang: str, key: str, **kwargs: Any) -> str:
     pack = _MSG[lang] if lang in _MSG else _MSG["en"]
     return pack[key].format(**kwargs)
+
+
+def _notice(lang: str, tag: str, *lines: str) -> str:
+    return card(_m(lang, tag), [line for line in lines if line])
 
 
 def _verb_list(state: TableState) -> str:
@@ -195,24 +214,31 @@ def _verb_list(state: TableState) -> str:
 def local_status(state: TableState) -> str:
     lang = state.lang if state.lang in _MSG else "en"
     none = _m(lang, "none")
-    rules = "\n".join(f"- {r}" for r in state.rules) if state.rules else none
-    limits = "\n".join(f"- {x}" for x in state.limits) if state.limits else none
-    commands = ", ".join(c.get("verb", "") for c in state.commands) or none
+    title = state.title or _m(lang, "tag_mesa")
+    cmds = ", ".join(c.get("verb", "") for c in state.commands) or none
     players = ", ".join(
         str(p.get("name") or p.get("id")) for p in state.players.values()
     ) or none
-    return _m(
-        lang,
-        "status",
-        title=state.title or none,
-        phase=state.phase,
-        lang=state.lang,
-        brief=state.brief or none,
-        rules=rules,
-        limits=limits,
-        commands=commands,
-        players=players,
-    )
+    lines = [
+        f"{state.phase} · {state.lang}",
+        state.brief or none,
+        DIV,
+        _m(lang, "lbl_rules"),
+        *bullets(list(state.rules), none),
+        _m(lang, "lbl_limits"),
+        *bullets(list(state.limits), none),
+        DIV,
+        f"{_m(lang, 'lbl_cmds')}  {cmds}",
+        f"{_m(lang, 'lbl_pcs')}  {players}",
+    ]
+    return card(title, lines)
+
+
+@dataclass(frozen=True)
+class PurgeAll:
+    """Admin confirmed a full Telegram history wipe. Handler runs the API."""
+
+    lang: str
 
 
 @dataclass
@@ -234,7 +260,7 @@ class BridgeContext:
     mentions: dict[str, int] = field(default_factory=dict)
 
 
-async def process_command(ctx: BridgeContext, text: str) -> str | None:
+async def process_command(ctx: BridgeContext, text: str) -> str | PurgeAll | None:
     """Handle one chat line. None means ignore (do not call the GM, do not reply)."""
     parsed = parse_cmd(text)
     if parsed is None:
@@ -260,43 +286,60 @@ async def process_command(ctx: BridgeContext, text: str) -> str | None:
     if verb not in SYSTEM_VERBS:
         if verb not in state.command_verbs():
             ctx.store.save(state)
-            return _m(lang, "unknown", verb=verb, list=_verb_list(state))
+            return _notice(
+                lang,
+                "tag_stop",
+                _m(lang, "unknown", verb=verb),
+                _m(lang, "unknown_list", list=_verb_list(state)),
+            )
         state.upsert_player(ctx.user.id, ctx.user.name)
 
     if verb in ADMIN_VERBS and not is_adm:
         ctx.store.save(state)
-        return _m(lang, "not_admin", verb=verb)
+        return _notice(lang, "tag_stop", _m(lang, "not_admin", verb=verb))
 
     if verb == "help":
         ctx.store.save(state)
-        return _m(lang, "help")
+        return card(
+            _m(lang, "tag_help"),
+            [
+                _m(lang, "help_intro"),
+                DIV,
+                "/cmd <verb> [text]",
+                _m(lang, "help_sys"),
+                DIV,
+                _m(lang, "help_after"),
+            ],
+        )
 
     if verb == "whoami":
         ctx.store.save(state)
-        return _m(
-            lang,
-            "whoami",
-            name=ctx.user.name,
-            id=ctx.user.id,
-            admin=_m(lang, "yes") if is_adm else _m(lang, "no"),
+        admin_flag = _m(lang, "yes") if is_adm else _m(lang, "no")
+        return card(
+            _m(lang, "tag_you"),
+            [
+                ctx.user.name,
+                f"id  {ctx.user.id}",
+                f"admin  {admin_flag}",
+            ],
         )
 
     if verb == "grant":
         target = admin_mod.resolve_user_id(payload, ctx.mentions)
         if target is None:
             ctx.store.save(state)
-            return _m(lang, "grant_bad")
+            return _notice(lang, "tag_stop", _m(lang, "grant_bad"))
         result = admin_mod.grant(state, target)
         ctx.store.save(state)
         who = payload.strip() or str(target)
         key = "grant_already" if result == admin_mod.ALREADY else "grant_ok"
-        return _m(lang, key, who=who)
+        return _notice(lang, "tag_ok", _m(lang, key, who=who))
 
     if verb == "revoke":
         target = admin_mod.resolve_user_id(payload, ctx.mentions)
         if target is None:
             ctx.store.save(state)
-            return _m(lang, "revoke_bad")
+            return _notice(lang, "tag_stop", _m(lang, "revoke_bad"))
         result = admin_mod.revoke(
             state,
             target,
@@ -311,13 +354,20 @@ async def process_command(ctx: BridgeContext, text: str) -> str | None:
             admin_mod.CREATOR: "revoke_creator",
             admin_mod.ENV: "revoke_env",
         }
-        return _m(lang, keys[result], who=who)
+        tag = "tag_ok" if result == admin_mod.OK else "tag_stop"
+        return _notice(lang, tag, _m(lang, keys[result], who=who))
+
+    if verb in PURGE_VERBS:
+        ctx.store.save(state)
+        if payload.lower() not in PURGE_CONFIRM:
+            return _notice(lang, "tag_purge", _m(lang, "purge_need"))
+        return PurgeAll(lang=lang)
 
     if verb == "lang":
         new_lang = payload.strip().lower()
         if new_lang not in SUPPORTED_LANGS:
             ctx.store.save(state)
-            return _m(lang, "bad_lang")
+            return _notice(lang, "tag_stop", _m(lang, "bad_lang"))
         state.lang = new_lang
         lang = new_lang
 
@@ -346,8 +396,8 @@ async def process_command(ctx: BridgeContext, text: str) -> str | None:
         if verb == "status":
             return local_status(state)
         if verb == "lang":
-            return _m(lang, "lang_local", lang=state.lang)
-        return _m(lang, "webhook_empty")
+            return _notice(lang, "tag_lang", _m(lang, "lang_local", lang=state.lang))
+        return _notice(lang, "tag_err", _m(lang, "webhook_empty"))
 
     apply_reply(state, gm_reply)
     ctx.store.save(state)
@@ -360,7 +410,7 @@ async def process_command(ctx: BridgeContext, text: str) -> str | None:
         try:
             dice = roll_dice(expr)
         except ValueError:
-            return _join_say(first_say, _m(lang, "dice_bad", expr=expr))
+            return _join_say(first_say, _notice(lang, "tag_err", _m(lang, "dice_bad", expr=expr)))
         second = await _call_gm(
             ctx, state, "dice-result", dice_req.get("reason") or "", is_adm, dice=dice
         )
@@ -369,7 +419,8 @@ async def process_command(ctx: BridgeContext, text: str) -> str | None:
             ctx.store.save(state)
             second_say = str(second.get("say") or "").strip()
             return _join_say(first_say, second_say)
-        return _join_say(first_say, _m(state.lang if state.lang in _MSG else "en", "webhook_empty"))
+        loc = state.lang if state.lang in _MSG else "en"
+        return _join_say(first_say, _notice(loc, "tag_err", _m(loc, "webhook_empty")))
 
     if verb == "status" and not first_say:
         return local_status(state)
@@ -399,7 +450,7 @@ async def _call_gm(
     except Exception as exc:
         log.exception("GM error for verb=%s chat=%s", verb, state.chat_id)
         lang = state.lang if state.lang in _MSG else "en"
-        raise GmError(_m(lang, "gm_error", err=type(exc).__name__)) from exc
+        raise GmError(_notice(lang, "tag_err", _m(lang, "gm_error", err=type(exc).__name__))) from exc
 
 
 class GmError(RuntimeError):
@@ -480,18 +531,60 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         mentions=extract_mentions(message),
     )
     try:
-        say = await process_command(ctx, text)
+        result = await process_command(ctx, text)
     except GmError as exc:
-        say = str(exc)
-    if not say:
+        result = str(exc)
+    if isinstance(result, PurgeAll):
+        await _execute_purge(message, context, result.lang)
         return
-    await _publish(message, say)
+    if not result:
+        return
+    await _publish(message, result)
 
 
-async def _publish(message: Any, say: str) -> None:
-    chunks = _chunk(say, TG_LIMIT)
-    for chunk in chunks:
-        await message.reply_text(chunk)
+async def _execute_purge(message: Any, context: ContextTypes.DEFAULT_TYPE, lang: str) -> None:
+    work = _notice(lang, "tag_purge", _m(lang, "purge_work"))
+    progress = None
+    try:
+        progress = await message.reply_text(
+            as_html_pre(work), parse_mode=ParseMode.HTML
+        )
+    except Exception:
+        log.debug("could not post purge progress", exc_info=True)
+    stats = await purge_upto(context.bot, message.chat_id, int(message.message_id))
+    if progress is not None:
+        try:
+            await progress.delete()
+        except Exception:
+            pass
+    if stats.denied:
+        say = _notice(lang, "tag_stop", _m(lang, "purge_denied"))
+    elif stats.deleted <= 0:
+        say = _notice(lang, "tag_purge", _m(lang, "purge_none"))
+    else:
+        say = _notice(
+            lang,
+            "tag_purge",
+            _m(lang, "purge_ok", n=stats.deleted, fail=stats.failed),
+        )
+    await _publish(message, say, reply=False)
+
+
+async def _publish(message: Any, say: str, *, reply: bool = True) -> None:
+    # <pre>…</pre> keeps the card aligned on mobile; tags eat a few chars.
+    bot = message.get_bot()
+    chat_id = message.chat_id
+    for chunk in _chunk(say, TG_LIMIT - 24):
+        html = as_html_pre(chunk)
+        if reply:
+            try:
+                await message.reply_text(html, parse_mode=ParseMode.HTML)
+                continue
+            except Exception as exc:
+                if "not found" not in str(exc).lower():
+                    raise
+                log.debug("reply target gone, sending standalone: %s", exc)
+        await bot.send_message(chat_id=chat_id, text=html, parse_mode=ParseMode.HTML)
 
 
 def _chunk(text: str, limit: int) -> list[str]:

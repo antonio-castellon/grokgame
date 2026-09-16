@@ -4,7 +4,7 @@ from pathlib import Path
 from mesa.gm.mock import MockGM
 from mesa.parse import parse_cmd
 from mesa.store import Store
-from mesa.telegram.handlers import BridgeContext, BridgeUser, process_command
+from mesa.telegram.handlers import BridgeContext, BridgeUser, PurgeAll, process_command
 
 
 def _ctx(tmp_path: Path, user_id: int = 1, admin: bool = True) -> BridgeContext:
@@ -28,6 +28,18 @@ def _run(ctx: BridgeContext, text: str) -> str | None:
     return asyncio.run(process_command(ctx, text))
 
 
+def _plain(say: str) -> str:
+    """Join inner card rows so wrapped lines compare as one string."""
+    parts: list[str] = []
+    for line in say.splitlines():
+        core = line.strip()
+        if core.startswith("│") and core.endswith("│"):
+            core = core[1:-1].strip()
+            if core:
+                parts.append(core)
+    return " ".join(parts)
+
+
 def test_plain_chat_does_not_call_gm(tmp_path: Path):
     ctx = _ctx(tmp_path)
     assert _run(ctx, "buenos días") is None
@@ -36,7 +48,7 @@ def test_plain_chat_does_not_call_gm(tmp_path: Path):
 
 def test_non_admin_cannot_new_game_reset_lang(tmp_path: Path):
     ctx = _ctx(tmp_path, user_id=99, admin=False)
-    for text in ("/cmd new-game faro", "/cmd reset", "/cmd lang es"):
+    for text in ("/cmd new-game faro", "/cmd reset", "/cmd lang es", "/cmd purge all"):
         say = _run(ctx, text)
         assert say is not None
         assert "admin" in say.lower()
@@ -70,8 +82,9 @@ def test_acceptance_conversation(tmp_path: Path):
     _run(admin, "/cmd limit cada acción máximo 2 frases")
     status = _run(admin, "/cmd status")
     assert status
-    assert "el tren no puede detenerse hasta el final" in status
-    assert "cada acción máximo 2 frases" in status
+    body = _plain(status)
+    assert "el tren no puede detenerse hasta el final" in body
+    assert "cada acción máximo 2 frases" in body
 
     player = BridgeContext(
         chat_id=admin.chat_id,
