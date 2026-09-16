@@ -12,6 +12,7 @@ class Turn:
     title: str | None = None
     rules: list[str] | None = None
     phase: str = "playing"
+    photos: list[str] = field(default_factory=list)
 
 
 def uid(request: dict[str, Any]) -> str:

@@ -3,12 +3,20 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from pathlib import Path
+
 from mesa.games.common import Turn, cmds, pick, uid, uname
 from mesa.skin import DIV, card
 
+_CARDS_DIR = Path(__file__).resolve().parents[1] / "assets" / "cards"
+
+
+def card_image_path(rank: int, suit: str) -> Path | None:
+    path = _CARDS_DIR / f"{suit}_{int(rank)}.jpg"
+    return path if path.is_file() else None
+
 SUITS = ("oros", "copas", "espadas", "bastos")
 RANKS = (1, 2, 3, 4, 5, 6, 7, 10, 11, 12)
-RANK_NAME = {1: "AS", 10: "SOTA", 11: "CABAL", 12: "REY"}
 
 KEYWORDS = (
     "21",
@@ -93,21 +101,64 @@ def _total(hand: list[list[Any]]) -> int:
     return total
 
 
-def _label(rank: int) -> str:
-    return RANK_NAME.get(rank, str(rank))
+# Spanish deck pictures. ASCII only so Telegram does not emoji-smash the grid.
+_W = 13
+_RANK = {1: "AS", 10: "SOTA", 11: "CABALLO", 12: "REY"}
+_SUIT_NAME = {
+    "oros": "ORO",
+    "copas": "COPA",
+    "espadas": "ESPADA",
+    "bastos": "BASTOS",
+}
+_SUIT_ART = {
+    "copas": (
+        r"    ) (    ",
+        r"   (   )   ",
+        r"   |___|   ",
+        r"     |     ",
+    ),
+    "oros": (
+        r"    .-.    ",
+        r"   ( O )   ",
+        r"    '-'    ",
+        r"           ",
+    ),
+    "espadas": (
+        r"     ^     ",
+        r"    /|\    ",
+        r"     |     ",
+        r"     '     ",
+    ),
+    "bastos": (
+        r"    \|/    ",
+        r"     |     ",
+        r"     |     ",
+        r"    / \    ",
+    ),
+}
+
+
+def _rank_name(rank: int) -> str:
+    return _RANK.get(int(rank), str(int(rank)))
+
+
+def _box_row(inner: str) -> str:
+    return "|" + inner[:_W].ljust(_W) + "|"
 
 
 def _ascii_card(rank: int, suit: str) -> str:
-    lab = _label(rank).ljust(5)
-    su = suit[:5].upper().ljust(5)
-    return "\n".join(
-        [
-            "┌───────┐",
-            f"│ {lab} │",
-            f"│ {su} │",
-            "└───────┘",
-        ]
-    )
+    title = _rank_name(rank)
+    art = _SUIT_ART.get(suit, _SUIT_ART["oros"])
+    footer = _SUIT_NAME.get(suit, suit.upper())
+    edge = "+" + "-" * _W + "+"
+    rows = [
+        edge,
+        _box_row(title),
+        *(_box_row(line.center(_W)) for line in art),
+        _box_row(footer.center(_W)),
+        edge,
+    ]
+    return "\n".join(rows)
 
 
 def _winner_banner(name: str, lang: str) -> str:
@@ -236,16 +287,21 @@ class Blackjack:
         rank, suit = deck.pop()
         p["hand"].append([rank, suit])
         total = _total(p["hand"])
-        art = _ascii_card(int(rank), str(suit))
-        lines = art.split("\n") + [f"pts {total}"]
+        name = _rank_name(int(rank))
+        sname = _SUIT_NAME.get(str(suit), str(suit))
+        extra: list[str] = [f"{name} de {sname}", f"pts {total}"]
         if total > 21:
             p["bust"] = True
             p["stand"] = True
-            lines.append(pick(lang, {"es": "Te pasas.", "en": "Bust.", "fr": "Dépassé.", "de": "Überkauft."}))
+            extra.append(pick(lang, {"es": "Te pasas.", "en": "Bust.", "fr": "Dépassé.", "de": "Überkauft."}))
         end = self._maybe_end(state, lang)
         if end:
-            lines.extend(["", end])
-        return Turn(say=card("otra", lines), state=state)
+            extra.extend(["", end])
+        photo = card_image_path(int(rank), str(suit))
+        if photo is not None:
+            return Turn(say="\n".join(extra), state=state, photos=[str(photo)])
+        art = _ascii_card(int(rank), str(suit))
+        return Turn(say="\n".join(["otra", art, *extra]), state=state)
 
     def _stand(self, request: dict, state: dict, lang: str) -> Turn:
         got = self._need_player(request, state, lang)

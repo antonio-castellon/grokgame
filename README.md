@@ -35,23 +35,22 @@ Grok as a live DM needs an `XAI_API_KEY` (paid API). You do **not** need that to
 Set `GM_BACKEND=mock` in `.env` and run `python -m mesa.main`. The bot is then a little cartridge compilation in Python: same `/cmd` grammar, no agent, no token bill.
 
 ```
-/cmd list games          list the local cartridges
-/cmd load blackjack      start one by id (admin)
-/cmd new-game cartas del 21   same, if the brief matches
+/cmd list games
+/cmd load <id>
 ```
 
-If the brief matches nothing, you get the old echo table (join / act / look).
+`<id>` is the first column (admin loads the game):
 
-| Say this | You get |
+| `/cmd load <id>` | Then play with |
 |---|---|
-| `/cmd new-game cartas del 21` | Spanish 48-card 21. `/cmd join`, `/cmd otra`, `/cmd planto`. ASCII cards + points. `GANADOR ES:` |
-| `/cmd new-game mini rol, un goblin en la cueva` | Tiny RPG. `/cmd join`, `look`, `go norte`, `attack`, `inventory` |
-| `/cmd new-game acertijos sobre el mar` | Riddles. `/cmd guess`, `hint`, `next` |
-| `/cmd new-game trivia de cine` | Quiz. `/cmd a` `b` `c` `d` |
-| `/cmd new-game duelo de dados` | 2d6. `/cmd roll` |
-| `/cmd new-game piedra papel tijera` | RPS. `/cmd piedra` `papel` `tijera` |
-| `/cmd new-game adivina el número` | 1–100. `/cmd guess 42` |
-| `/cmd new-game tres en raya` | Tic-tac-toe. `/cmd put 5` |
+| `blackjack` | `/cmd join` `/cmd otra` `/cmd planto` — ASCII 21, `GANADOR ES:` |
+| `rpg` | `/cmd join` `look` `go norte` `attack` `inventory` |
+| `riddle` | `/cmd guess` `hint` `next` |
+| `trivia` | `/cmd a` `b` `c` `d` |
+| `dice` | `/cmd join` `/cmd roll` (2d6) |
+| `rps` | `/cmd piedra` `papel` `tijera` |
+| `number` | `/cmd guess 42` (1–100) |
+| `tictactoe` | `/cmd join` `/cmd put 5` |
 
 These are mock-ups, not Grok. They exist so a kid can play tonight while the grown-up decides whether to feed the API dragon.
 

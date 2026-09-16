@@ -1,6 +1,7 @@
 import asyncio
 
 from mesa.games import pick_game
+from mesa.games.blackjack import _ascii_card, card_image_path
 from mesa.gm.base import build_request
 from mesa.gm.mock import MockGM
 from mesa.store import TableState
@@ -33,6 +34,30 @@ def test_catalog_picks():
     assert pick_game("misterio en un faro") is None
 
 
+def test_rey_espadas_looks_like_a_card():
+    art = _ascii_card(12, "espadas")
+    assert "REY" in art
+    assert "ESPADA" in art
+    assert "^" in art
+    lines = art.splitlines()
+    assert all(len(line) == len(lines[0]) for line in lines)
+
+
+def test_card_images_exist():
+    assert card_image_path(7, "copas") is not None
+    assert card_image_path(12, "espadas") is not None
+    assert card_image_path(1, "oros") is not None
+
+
+def test_spanish_suit_pictures():
+    copa = _ascii_card(7, "copas")
+    assert "7" in copa and "COPA" in copa and ") (" in copa
+    oro = _ascii_card(1, "oros")
+    assert "AS" in oro and "ORO" in oro
+    basto = _ascii_card(10, "bastos")
+    assert "SOTA" in basto and "BASTOS" in basto
+
+
 def test_blackjack_hit_and_ascii():
     start = _run(_req("new-game", "cartas del 21"))
     assert start["blob"]["_local"] == "blackjack"
@@ -43,7 +68,6 @@ def test_blackjack_hit_and_ascii():
     blob = joined["blob"]
     hit = _run(_req("otra", "", commands=start["commands"], blob=blob, phase="playing"))
     assert "pts" in hit["say"]
-    assert "┌" in hit["say"]
 
 
 def test_list_and_load_via_bridge(tmp_path):
@@ -65,7 +89,12 @@ def test_list_and_load_via_bridge(tmp_path):
     joined = _run(ctx, "/cmd join")
     assert joined
     hit = _run(ctx, "/cmd otra")
-    assert hit and "pts" in hit
+    from mesa.telegram.handlers import Reply
+
+    text = hit.text if isinstance(hit, Reply) else str(hit)
+    assert "pts" in text
+    if isinstance(hit, Reply):
+        assert hit.photos
 
 
 def test_rpg_join_look():

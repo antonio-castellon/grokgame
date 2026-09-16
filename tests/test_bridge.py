@@ -142,6 +142,8 @@ def test_whoami_and_help(tmp_path: Path):
     assert who and "1" in who and "Ana" in who
     help_text = _run(ctx, "/cmd help")
     assert help_text and "new-game" in help_text
+    assert "blackjack" in help_text
+    assert "/cmd load" in help_text
 
 
 def test_grant_revoke(tmp_path: Path):

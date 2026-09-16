@@ -35,23 +35,22 @@ Grok als Live-Spielleiter braucht `XAI_API_KEY` (kostenpflichtige API). Zum Test
 Setze `GM_BACKEND=mock` in `.env` und starte `python -m mesa.main`. Der Bot ist dann eine Python-Compilation-Kassette: dieselbe `/cmd`-Grammatik, kein Agent, keine Rechnung.
 
 ```
-/cmd list games          lokale Spiele auflisten
-/cmd load blackjack      eines per id starten (Admin)
-/cmd new-game cartas del 21   dasselbe, wenn der Text passt
+/cmd list games
+/cmd load <id>
 ```
 
-Sonst Echo-Tisch (join / act / look).
+`<id>` ist die erste Spalte (ein Admin lädt das Spiel):
 
-| Sag das | Bekommst du |
+| `/cmd load <id>` | Dann spielen mit |
 |---|---|
-| `/cmd new-game cartas del 21` | 21, 48 Karten. `join`, `otra`, `planto`. ASCII-Karten. `GANADOR ES:` |
-| `/cmd new-game mini rol, un goblin en la cueva` | Mini-Rollenspiel. `look`, `go norte`, `attack` |
-| `/cmd new-game acertijos sobre el mar` | Rätsel. `guess`, `hint`, `next` |
-| `/cmd new-game trivia de cine` | Quiz. `a` `b` `c` `d` |
-| `/cmd new-game duelo de dados` | 2d6. `roll` |
-| `/cmd new-game piedra papel tijera` | `piedra` `papel` `tijera` |
-| `/cmd new-game adivina el número` | 1–100. `guess 42` |
-| `/cmd new-game tres en raya` | `put 5` |
+| `blackjack` | `/cmd join` `/cmd otra` `/cmd planto` — ASCII-21, `GANADOR ES:` |
+| `rpg` | `/cmd join` `look` `go norte` `attack` `inventory` |
+| `riddle` | `/cmd guess` `hint` `next` |
+| `trivia` | `/cmd a` `b` `c` `d` |
+| `dice` | `/cmd join` `/cmd roll` (2d6) |
+| `rps` | `/cmd piedra` `papel` `tijera` |
+| `number` | `/cmd guess 42` (1–100) |
+| `tictactoe` | `/cmd join` `/cmd put 5` |
 
 Das sind Attrappen, nicht Grok. Damit ein Kind heute Abend spielen kann, während der Erwachsene überlegt, ob der API-Drache Futter bekommt.
 

@@ -35,23 +35,22 @@ Para que Grok sea el máster en directo hace falta `XAI_API_KEY` (API de pago). 
 Pon `GM_BACKEND=mock` en `.env` y arranca `python -m mesa.main`. El bot es entonces un cartucho recopilatorio en Python: la misma gramática `/cmd`, sin agente, sin factura.
 
 ```
-/cmd list games          lista los cartuchos locales
-/cmd load blackjack      arranca uno por id (admin)
-/cmd new-game cartas del 21   igual, si el texto encaja
+/cmd list games
+/cmd load <id>
 ```
 
-Si no encaja, queda la mesa eco (join / act / look).
+`<id>` es la primera columna (un admin carga el juego):
 
-| Di esto | Sale esto |
+| `/cmd load <id>` | Luego juegas con |
 |---|---|
-| `/cmd new-game cartas del 21` | 21 con baraja de 48. `/cmd join`, `otra`, `planto`. Cartas ASCII + puntos. `GANADOR ES:` |
-| `/cmd new-game mini rol, un goblin en la cueva` | Mini-rol. `/cmd join`, `look`, `go norte`, `attack`, `inventory` |
-| `/cmd new-game acertijos sobre el mar` | Acertijos. `/cmd guess`, `hint`, `next` |
-| `/cmd new-game trivia de cine` | Trivia. `/cmd a` `b` `c` `d` |
-| `/cmd new-game duelo de dados` | 2d6. `/cmd roll` |
-| `/cmd new-game piedra papel tijera` | `/cmd piedra` `papel` `tijera` |
-| `/cmd new-game adivina el número` | 1–100. `/cmd guess 42` |
-| `/cmd new-game tres en raya` | `/cmd put 5` |
+| `blackjack` | `/cmd join` `/cmd otra` `/cmd planto` — 21 ASCII, `GANADOR ES:` |
+| `rpg` | `/cmd join` `look` `go norte` `attack` `inventory` |
+| `riddle` | `/cmd guess` `hint` `next` |
+| `trivia` | `/cmd a` `b` `c` `d` |
+| `dice` | `/cmd join` `/cmd roll` (2d6) |
+| `rps` | `/cmd piedra` `papel` `tijera` |
+| `number` | `/cmd guess 42` (1–100) |
+| `tictactoe` | `/cmd join` `/cmd put 5` |
 
 Son maquetas, no Grok. Están para que un crío juegue esta noche mientras el adulto decide si da de comer al dragón de la API.
 

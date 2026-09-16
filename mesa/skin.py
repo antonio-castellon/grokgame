@@ -26,7 +26,15 @@ def _row(text: str) -> str:
 
 
 def _wrap(text: str) -> list[str]:
-    raw = " ".join((text or "").split())
+    raw = text or ""
+    # ASCII art: keep spaces and never reflow (Telegram <pre> needs this).
+    if any(ch in raw for ch in "+-|┌┐└┘│─\\/") or "  " in raw:
+        if not raw.strip():
+            return [_row("")]
+        if len(raw) <= INNER:
+            return [_row(raw)]
+        return [_row(raw[:INNER])]
+    raw = " ".join(raw.split())
     if not raw:
         return [_row("")]
     lines: list[str] = []

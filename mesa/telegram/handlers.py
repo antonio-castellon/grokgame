@@ -41,7 +41,8 @@ _MSG = {
         "tag_err": "err",
         "help_intro": "Un admin describe el juego; Grok inventa reglas y comandos.",
         "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
-        "help_after": "Juegos locales: /cmd list games  y  /cmd load blackjack",
+        "help_after": "Locales: /cmd list games",
+        "help_load": "id para /cmd load <id>:",
         "tag_purge": "clear",
         "purge_need": "Borra TODOS los mensajes de cualquiera. Confirma: /cmd clear all",
         "purge_work": "Borrando todos los mensajes…",
@@ -89,7 +90,8 @@ _MSG = {
         "tag_err": "err",
         "help_intro": "Un admin décrit le jeu ; Grok invente règles et commandes.",
         "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
-        "help_after": "Jeux locaux : /cmd list games  et  /cmd load blackjack",
+        "help_after": "Locaux : /cmd list games",
+        "help_load": "id pour /cmd load <id> :",
         "tag_purge": "clear",
         "purge_need": "Efface TOUS les messages de n'importe qui. Confirme : /cmd clear all",
         "purge_work": "Suppression de tous les messages…",
@@ -137,7 +139,8 @@ _MSG = {
         "tag_err": "err",
         "help_intro": "Ein Admin beschreibt das Spiel; Grok erfindet Regeln und Befehle.",
         "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
-        "help_after": "Lokale Spiele: /cmd list games  und  /cmd load blackjack",
+        "help_after": "Lokal: /cmd list games",
+        "help_load": "id für /cmd load <id>:",
         "tag_purge": "clear",
         "purge_need": "Löscht ALLE Nachrichten von jedem. Bestätigen: /cmd clear all",
         "purge_work": "Lösche alle Nachrichten…",
@@ -185,7 +188,8 @@ _MSG = {
         "tag_err": "err",
         "help_intro": "An admin describes the game; Grok invents rules and commands.",
         "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
-        "help_after": "Local games: /cmd list games  and  /cmd load blackjack",
+        "help_after": "Local: /cmd list games",
+        "help_load": "id for /cmd load <id>:",
         "tag_purge": "clear",
         "purge_need": "Deletes EVERY message from anyone. Confirm: /cmd clear all",
         "purge_work": "Deleting every message…",
@@ -305,6 +309,12 @@ class PurgeAll:
 
 
 @dataclass
+class Reply:
+    text: str
+    photos: list[str] = field(default_factory=list)
+
+
+@dataclass
 class BridgeUser:
     id: int
     name: str
@@ -323,7 +333,7 @@ class BridgeContext:
     mentions: dict[str, int] = field(default_factory=dict)
 
 
-async def process_command(ctx: BridgeContext, text: str) -> str | PurgeAll | None:
+async def process_command(ctx: BridgeContext, text: str) -> str | Reply | PurgeAll | None:
     """Handle one chat line. None means ignore (do not call the GM, do not reply)."""
     parsed = parse_cmd(text)
     if parsed is None:
@@ -372,6 +382,8 @@ async def process_command(ctx: BridgeContext, text: str) -> str | PurgeAll | Non
                 _m(lang, "help_sys"),
                 DIV,
                 _m(lang, "help_after"),
+                _m(lang, "help_load"),
+                *catalog_lines(lang),
             ],
         )
 
@@ -504,6 +516,8 @@ async def process_command(ctx: BridgeContext, text: str) -> str | PurgeAll | Non
             if turn.title:
                 state.title = turn.title
             ctx.store.save(state)
+            if turn.photos:
+                return Reply(text=turn.say, photos=list(turn.photos))
             return turn.say
 
     gm_reply = await _call_gm(ctx, state, verb, payload, is_adm, dice=None)
@@ -663,6 +677,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if isinstance(result, PurgeAll):
         await _execute_purge(message, context, result.lang)
         return
+    if isinstance(result, Reply):
+        await _publish_photos(message, result)
+        return
     if not result:
         return
     await _publish(message, result)
@@ -711,6 +728,26 @@ async def _execute_purge(message: Any, context: ContextTypes.DEFAULT_TYPE, lang:
             _m(lang, "purge_ok", n=stats.deleted, fail=stats.failed),
         )
     await _publish(message, say, reply=False)
+
+
+async def _publish_photos(message: Any, result: Reply) -> None:
+    bot = message.get_bot()
+    chat_id = message.chat_id
+    caption = (result.text or "")[:1024]
+    sent_caption = False
+    for path in result.photos:
+        try:
+            with open(path, "rb") as fh:
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=fh,
+                    caption=caption if not sent_caption else None,
+                )
+            sent_caption = True
+        except Exception:
+            log.exception("send_photo failed %s", path)
+    if not sent_caption and result.text:
+        await _publish(message, result.text, reply=False)
 
 
 async def _publish(message: Any, say: str, *, reply: bool = True) -> None:
