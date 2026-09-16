@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import time
+import uuid
+from typing import Any
+
+import httpx
+
+from mesa.gm.base import SCHEMA_REPLY
+
+HEADER_ID = "webhook-id"
+HEADER_TIMESTAMP = "webhook-timestamp"
+HEADER_SIGNATURE = "webhook-signature"
+
+
+def secret_key(secret: str) -> bytes:
+    """Standard Webhooks key: `whsec_` + base64, or raw utf-8 fallback."""
+    raw = (secret or "").strip()
+    if raw.startswith("whsec_"):
+        raw = raw[len("whsec_") :]
+        return base64.b64decode(raw)
+    try:
+        decoded = base64.b64decode(raw, validate=True)
+        if decoded:
+            return decoded
+    except Exception:
+        pass
+    return raw.encode("utf-8")
+
+
+def sign(secret: str, msg_id: str, timestamp: str | int, payload: bytes) -> str:
+    """HMAC-SHA256 of `{id}.{timestamp}.{body}`, base64, without the `v1,` prefix."""
+    key = secret_key(secret)
+    signed = f"{msg_id}.{timestamp}.".encode("utf-8") + payload
+    digest = hmac.new(key, signed, hashlib.sha256).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
+def signature_header(secret: str, msg_id: str, timestamp: str | int, payload: bytes) -> str:
+    return f"v1,{sign(secret, msg_id, timestamp, payload)}"
+
+
+def verify(
+    secret: str,
+    msg_id: str,
+    timestamp: str | int,
+    payload: bytes,
+    header: str,
+) -> bool:
+    expected = sign(secret, msg_id, timestamp, payload)
+    for part in (header or "").split():
+        version, _, candidate = part.partition(",")
+        if version != "v1" or not candidate:
+            continue
+        if hmac.compare_digest(expected, candidate):
+            return True
+    return False
+
+
+class WebhookGM:
+    def __init__(self, url: str, secret: str, reply_mode: str = "http") -> None:
+        self.url = url
+        self.secret = secret
+        self.reply_mode = reply_mode
+
+    async def reply(self, request: dict[str, Any]) -> dict[str, Any] | None:
+        if not self.url:
+            raise RuntimeError("WEBHOOK_URL is empty")
+        body = json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
+        msg_id = f"msg_{uuid.uuid4().hex}"
+        timestamp = str(int(time.time()))
+        headers = {
+            "Content-Type": "application/json",
+            HEADER_ID: msg_id,
+            HEADER_TIMESTAMP: timestamp,
+            HEADER_SIGNATURE: signature_header(self.secret, msg_id, timestamp, body),
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(self.url, content=body, headers=headers)
+            response.raise_for_status()
+            raw = response.content
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            text = raw.decode("utf-8", errors="replace").strip()
+            return {**_text_reply(request, text)}
+        if isinstance(data, dict):
+            if data.get("schema") == SCHEMA_REPLY or "say" in data:
+                data.setdefault("schema", SCHEMA_REPLY)
+                return data
+            text = json.dumps(data, ensure_ascii=False)
+            return _text_reply(request, text)
+        return _text_reply(request, str(data))
+
+
+def _text_reply(request: dict[str, Any], text: str) -> dict[str, Any]:
+    return {
+        "schema": SCHEMA_REPLY,
+        "say": text,
+        "lang": request.get("lang") or "en",
+        "dice_request": None,
+    }
