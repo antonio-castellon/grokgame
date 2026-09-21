@@ -25,7 +25,7 @@ def main() -> None:
     gm = create_gm(config)
     log.info("GM backend=%s data_dir=%s", config.gm_backend, config.data_dir)
     application = build_application(config, store, gm)
-    application.run_polling(allowed_updates=["message"])
+    application.run_polling(allowed_updates=["message", "callback_query"])
 
 
 if __name__ == "__main__":

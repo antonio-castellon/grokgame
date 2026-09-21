@@ -7,9 +7,23 @@ from typing import Any
 
 from telegram import Update
 from telegram.constants import ChatType, ParseMode
-from telegram.ext import Application, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from mesa import admin as admin_mod
+from mesa import safety
+from mesa.buttons import (
+    build_inline_keyboard,
+    claim_message_tap,
+    label_from_callback_message,
+    normalize_buttons,
+    resolve_callback_data,
+)
 from mesa.config import Config
 from mesa.dice import roll as roll_dice
 from mesa.games import catalog_lines, get_game, resolve_game
@@ -40,7 +54,7 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Un admin describe el juego; Grok inventa reglas y comandos.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load unload",
         "help_after": "Locales: /cmd list games",
         "help_load": "id para /cmd load <id>:",
         "tag_purge": "clear",
@@ -80,6 +94,9 @@ _MSG = {
         "games_hint": "/cmd load blackjack",
         "load_bad": "Juego desconocido. /cmd list games",
         "load_need": "Indica el juego: /cmd load blackjack",
+        "unload_ok": "Bot detenido. Reinicia el proceso para volver.",
+        "tap_taken": "Ya elegiste en este menú",
+        "tap_seat": "Primero únete a la mesa",
     },
     "fr": {
         "tag_help": "aide",
@@ -90,7 +107,7 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Un admin décrit le jeu ; Grok invente règles et commandes.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load unload",
         "help_after": "Locaux : /cmd list games",
         "help_load": "id pour /cmd load <id> :",
         "tag_purge": "clear",
@@ -130,6 +147,9 @@ _MSG = {
         "games_hint": "/cmd load blackjack",
         "load_bad": "Jeu inconnu. /cmd list games",
         "load_need": "Indique le jeu : /cmd load blackjack",
+        "unload_ok": "Bot arrêté. Relance le processus pour revenir.",
+        "tap_taken": "Déjà choisi sur ce menu",
+        "tap_seat": "Rejoins d'abord la table",
     },
     "de": {
         "tag_help": "hilfe",
@@ -140,7 +160,7 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "Ein Admin beschreibt das Spiel; Grok erfindet Regeln und Befehle.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load unload",
         "help_after": "Lokal: /cmd list games",
         "help_load": "id für /cmd load <id>:",
         "tag_purge": "clear",
@@ -180,6 +200,9 @@ _MSG = {
         "games_hint": "/cmd load blackjack",
         "load_bad": "Unbekanntes Spiel. /cmd list games",
         "load_need": "Spiel angeben: /cmd load blackjack",
+        "unload_ok": "Bot gestoppt. Prozess neu starten zum Fortsetzen.",
+        "tap_taken": "In diesem Menü schon gewählt",
+        "tap_seat": "Zuerst dem Tisch beitreten",
     },
     "en": {
         "tag_help": "help",
@@ -190,7 +213,7 @@ _MSG = {
         "tag_lang": "lang",
         "tag_err": "err",
         "help_intro": "An admin describes the game; Grok invents rules and commands.",
-        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load",
+        "help_sys": "sys  help lang new-game rules limit cmd status reset whoami grant revoke clear list load unload",
         "help_after": "Local: /cmd list games",
         "help_load": "id for /cmd load <id>:",
         "tag_purge": "clear",
@@ -230,6 +253,9 @@ _MSG = {
         "games_hint": "/cmd load blackjack",
         "load_bad": "Unknown game. /cmd list games",
         "load_need": "Name a game: /cmd load blackjack",
+        "unload_ok": "Bot stopped. Restart the process to come back.",
+        "tap_taken": "Already chosen on this menu",
+        "tap_seat": "Join the table first",
     },
 }
 
@@ -316,10 +342,18 @@ class PurgeAll:
     lang: str
 
 
+@dataclass(frozen=True)
+class Unload:
+    """Admin requested a clean process stop."""
+
+    lang: str
+
+
 @dataclass
 class Reply:
     text: str
     photos: list[str] = field(default_factory=list)
+    buttons: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -341,7 +375,7 @@ class BridgeContext:
     mentions: dict[str, int] = field(default_factory=dict)
 
 
-async def process_command(ctx: BridgeContext, text: str) -> str | Reply | PurgeAll | None:
+async def process_command(ctx: BridgeContext, text: str) -> str | Reply | PurgeAll | Unload | None:
     """Handle one chat line. None means ignore (do not call the GM, do not reply)."""
     parsed = parse_cmd(text)
     if parsed is None:
@@ -364,6 +398,11 @@ async def process_command(ctx: BridgeContext, text: str) -> str | Reply | PurgeA
     verb = parsed.verb
     payload = parsed.payload
 
+    blocked = safety.block_reason_for_payload(verb, payload)
+    if blocked is not None:
+        ctx.store.save(state)
+        return safety.refusal(blocked, lang)
+
     if verb not in SYSTEM_VERBS:
         if verb not in state.command_verbs():
             ctx.store.save(state)
@@ -378,6 +417,10 @@ async def process_command(ctx: BridgeContext, text: str) -> str | Reply | PurgeA
     if verb in ADMIN_VERBS and not is_adm:
         ctx.store.save(state)
         return _notice(lang, "tag_stop", _m(lang, "not_admin", verb=verb))
+
+    if verb == "unload":
+        ctx.store.save(state)
+        return Unload(lang=lang)
 
     if verb == "help":
         ctx.store.save(state)
@@ -555,8 +598,13 @@ async def process_command(ctx: BridgeContext, text: str) -> str | Reply | PurgeA
         loc = state.lang if state.lang in _MSG else "en"
         return _join_say(first_say, _notice(loc, "tag_err", _m(loc, "webhook_empty")))
 
+    gm_buttons = normalize_buttons(
+        gm_reply.get("buttons") if isinstance(gm_reply, dict) else None
+    )
     if verb == "status" and not first_say:
         return local_status(state)
+    if gm_buttons:
+        return Reply(text=first_say or "", buttons=gm_buttons)
     return first_say or None
 
 
@@ -682,15 +730,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         result = await process_command(ctx, text)
     except GmError as exc:
         result = str(exc)
-    if isinstance(result, PurgeAll):
-        await _execute_purge(message, context, result.lang)
-        return
-    if isinstance(result, Reply):
-        await _publish_photos(message, result)
-        return
-    if not result:
-        return
-    await _publish(message, result)
+    await _dispatch_result(message, context, result)
 
 
 async def _execute_purge(message: Any, context: ContextTypes.DEFAULT_TYPE, lang: str) -> None:
@@ -738,10 +778,52 @@ async def _execute_purge(message: Any, context: ContextTypes.DEFAULT_TYPE, lang:
     await _publish(message, say, reply=False)
 
 
-async def _publish_photos(message: Any, result: Reply) -> None:
+async def _dispatch_result(
+    message: Any,
+    context: ContextTypes.DEFAULT_TYPE,
+    result: str | Reply | PurgeAll | Unload | None,
+) -> None:
+    if isinstance(result, PurgeAll):
+        await _execute_purge(message, context, result.lang)
+        return
+    if isinstance(result, Unload):
+        data_dir = context.bot_data["store"].data_dir
+        await _publish(
+            message,
+            _notice(result.lang, "tag_ok", _m(result.lang, "unload_ok")),
+            data_dir=data_dir,
+        )
+        log.info("unload requested; stopping application")
+        context.application.stop_running()
+        return
+    if isinstance(result, Reply):
+        data_dir = context.bot_data["store"].data_dir
+        if result.photos:
+            await _publish_photos(message, result, data_dir=data_dir)
+            return
+        if result.text or result.buttons:
+            await _publish(
+                message,
+                result.text or " ",
+                buttons=result.buttons or None,
+                data_dir=data_dir,
+            )
+        return
+    if not result:
+        return
+    data_dir = context.bot_data["store"].data_dir
+    await _publish(message, result, data_dir=data_dir)
+
+
+async def _publish_photos(
+    message: Any,
+    result: Reply,
+    *,
+    data_dir: Any = None,
+) -> None:
     bot = message.get_bot()
     chat_id = message.chat_id
-    caption = (result.text or "")[:1024]
+    caption = safety.scrub_outbound((result.text or "")[:1024])
     sent_caption = False
     for path in result.photos:
         try:
@@ -754,26 +836,56 @@ async def _publish_photos(message: Any, result: Reply) -> None:
             sent_caption = True
         except Exception:
             log.exception("send_photo failed %s", path)
-    if not sent_caption and result.text:
-        await _publish(message, result.text, reply=False)
+    if not sent_caption and (result.text or result.buttons):
+        await _publish(
+            message,
+            result.text or " ",
+            reply=False,
+            buttons=result.buttons or None,
+            data_dir=data_dir,
+        )
 
 
-async def _publish(message: Any, say: str, *, reply: bool = True) -> None:
+async def _publish(
+    message: Any,
+    say: str,
+    *,
+    reply: bool = True,
+    buttons: list[dict[str, str]] | None = None,
+    data_dir: Any = None,
+) -> None:
     bot = message.get_bot()
     chat_id = message.chat_id
-    for chunk in _chunk(say, TG_LIMIT - 24):
+    say = safety.scrub_outbound(say or "")
+    markup = None
+    if buttons:
+        try:
+            markup = build_inline_keyboard(
+                buttons, chat_id=int(chat_id), data_dir=data_dir
+            )
+        except Exception:
+            log.exception("build_inline_keyboard failed")
+            markup = None
+    chunks = _chunk(say, TG_LIMIT - 24) or [" "]
+    for i, chunk in enumerate(chunks):
         html = as_html_pre(chunk)
+        kb = markup if i == 0 else None
         sent = None
-        if reply:
+        if reply and i == 0:
             try:
-                sent = await message.reply_text(html, parse_mode=ParseMode.HTML)
+                sent = await message.reply_text(
+                    html, parse_mode=ParseMode.HTML, reply_markup=kb
+                )
             except Exception as exc:
                 if "not found" not in str(exc).lower():
                     raise
                 log.debug("reply target gone, sending standalone: %s", exc)
         if sent is None:
             await bot.send_message(
-                chat_id=chat_id, text=html, parse_mode=ParseMode.HTML
+                chat_id=chat_id,
+                text=html,
+                parse_mode=ParseMode.HTML,
+                reply_markup=kb,
             )
 
 
@@ -794,10 +906,105 @@ def _chunk(text: str, limit: int) -> list[str]:
     return parts
 
 
+async def handle_callback_query(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    query = update.callback_query
+    if query is None:
+        return
+    user = update.effective_user
+    chat = update.effective_chat
+    msg = query.message
+    if user is None or chat is None:
+        try:
+            await query.answer()
+        except Exception:
+            pass
+        return
+
+    store: Store = context.bot_data["store"]
+    gm: GameMaster = context.bot_data["gm"]
+    config: Config = context.bot_data["config"]
+    data_dir = store.data_dir
+    state = store.load(chat.id)
+    lang = state.lang if state.lang in _MSG else "en"
+
+    raw_data = str(query.data or "")
+    button_id = resolve_callback_data(data_dir, chat.id, raw_data)
+
+    # Seated-only when the table already tracks players; otherwise skip the gate.
+    if state.players and str(user.id) not in state.players:
+        try:
+            await query.answer(text=_m(lang, "tap_seat"), show_alert=False)
+        except Exception:
+            log.debug("answerCallbackQuery seat toast failed", exc_info=True)
+        return
+
+    verb = (button_id or "").strip() or "tap"
+    payload = "" if verb != "tap" else (button_id or raw_data)
+    mid = getattr(msg, "message_id", None) if msg is not None else None
+
+    if mid is not None:
+        claimed = claim_message_tap(
+            data_dir, chat.id, int(mid), verb=verb, uid=user.id
+        )
+        if not claimed:
+            try:
+                await query.answer(text=_m(lang, "tap_taken"), show_alert=False)
+            except Exception:
+                log.debug("answerCallbackQuery duplicate toast failed", exc_info=True)
+            return
+
+    try:
+        await query.answer()
+    except Exception:
+        log.debug("answerCallbackQuery failed", exc_info=True)
+
+    if mid is not None and msg is not None:
+        try:
+            await msg.edit_reply_markup(reply_markup=None)
+        except Exception:
+            log.debug("edit_reply_markup failed", exc_info=True)
+
+    name = user.full_name or user.first_name or str(user.id)
+    button_label = label_from_callback_message(msg, raw_data) or verb
+    announce = safety.scrub_outbound(f"{name}: {button_label}")
+    try:
+        await context.bot.send_message(chat_id=chat.id, text=announce)
+    except Exception:
+        log.debug("announce tap failed", exc_info=True)
+
+    chat_admin_ids, creator_id = await _chat_admins(update, context)
+    ctx = BridgeContext(
+        chat_id=chat.id,
+        user=BridgeUser(
+            id=user.id,
+            name=name,
+            username=user.username,
+        ),
+        store=store,
+        gm=gm,
+        env_admin_ids=config.admin_telegram_ids,
+        chat_admin_ids=chat_admin_ids,
+        creator_id=creator_id,
+        mentions={},
+    )
+    cmd = f"/cmd {verb}"
+    if payload:
+        cmd = f"{cmd} {payload}"
+    try:
+        result = await process_command(ctx, cmd)
+    except GmError as exc:
+        result = str(exc)
+    target = msg if msg is not None else query
+    await _dispatch_result(target, context, result)
+
+
 def build_application(config: Config, store: Store, gm: GameMaster) -> Application:
     application = Application.builder().token(config.telegram_bot_token).build()
     application.bot_data["config"] = config
     application.bot_data["store"] = store
     application.bot_data["gm"] = gm
     application.add_handler(MessageHandler(filters.ALL, handle_message))
+    application.add_handler(CallbackQueryHandler(handle_callback_query))
     return application

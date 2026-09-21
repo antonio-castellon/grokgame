@@ -17,6 +17,37 @@ HEADER_ID = "webhook-id"
 HEADER_TIMESTAMP = "webhook-timestamp"
 HEADER_SIGNATURE = "webhook-signature"
 
+_UUID_RE = __import__("re").compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    __import__("re").I,
+)
+
+
+def wake_auth_mode(secret: str) -> str:
+    """Return ``bearer`` for Cursor ``crsr_`` keys; else ``standard`` (whsec_)."""
+    return "bearer" if (secret or "").strip().startswith("crsr_") else "standard"
+
+
+def normalize_webhook_urls(url: str) -> list[str]:
+    """Prefer api2.cursor.sh automations webhook when a UUID appears in the URL."""
+    url = (url or "").strip().rstrip("/")
+    if not url:
+        return []
+    out: list[str] = []
+    m = _UUID_RE.search(url)
+    if m:
+        out.append(f"https://api2.cursor.sh/automations/webhook/{m.group(0)}")
+    if url not in out:
+        out.append(url)
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for u in out:
+        if u not in seen:
+            seen.add(u)
+            uniq.append(u)
+    return uniq
+
+
 
 def secret_key(secret: str) -> bytes:
     """Standard Webhooks key: `whsec_` + base64, or raw utf-8 fallback."""
@@ -79,6 +110,19 @@ class WebhookGM:
     async def reply(self, request: dict[str, Any]) -> dict[str, Any] | None:
         if not self.url:
             raise RuntimeError("WEBHOOK_URL is empty")
+        if wake_auth_mode(self.secret) == "bearer":
+            parsed = await self._post_bearer(request)
+        else:
+            parsed = await self._post_standard(request)
+        if parsed is not None:
+            return parsed
+        # Automations return 202 with an empty body. Grok still has to speak
+        # in the group, so fall through to the synchronous API when keyed.
+        if self._xai is not None:
+            return await self._xai.reply(request)
+        return None
+
+    async def _post_standard(self, request: dict[str, Any]) -> dict[str, Any] | None:
         body = json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode(
             "utf-8"
         )
@@ -94,14 +138,28 @@ class WebhookGM:
             response = await client.post(self.url, content=body, headers=headers)
             response.raise_for_status()
             raw = response.content
-        parsed = self._parse_http_body(request, raw)
-        if parsed is not None:
-            return parsed
-        # Automations return 202 with an empty body. Grok still has to speak
-        # in the group, so fall through to the synchronous API when keyed.
-        if self._xai is not None:
-            return await self._xai.reply(request)
-        return None
+        return self._parse_http_body(request, raw)
+
+    async def _post_bearer(self, request: dict[str, Any]) -> dict[str, Any] | None:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.secret.strip()}",
+        }
+        last_exc: Exception | None = None
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for candidate in normalize_webhook_urls(self.url):
+                try:
+                    response = await client.post(
+                        candidate, headers=headers, json=request
+                    )
+                    response.raise_for_status()
+                    return self._parse_http_body(request, response.content)
+                except Exception as exc:
+                    last_exc = exc
+                    continue
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("WEBHOOK_URL is empty")
 
     def _parse_http_body(
         self, request: dict[str, Any], raw: bytes

@@ -36,6 +36,7 @@ SYSTEM_VERBS = frozenset(
         "clear",
         "list",
         "load",
+        "unload",
     }
 )
 
@@ -50,6 +51,7 @@ ADMIN_VERBS = frozenset(
         "revoke",
         "clear",
         "load",
+        "unload",
     }
 )
 

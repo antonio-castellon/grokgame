@@ -101,7 +101,10 @@ In the group:
 
 Use **Grok Automations** with a **Webhook** trigger and a `whsec_…` signing secret.
 
-Do **not** use a Grok Bot desktop routine with a `crsr_…` Bearer key. This app signs Standard Webhooks HMAC, not Bearer tokens.
+**Auth modes for `WEBHOOK_SECRET`:**
+
+- **`whsec_…` (default):** Standard Webhooks HMAC (`webhook-id` / `webhook-timestamp` / `webhook-signature`). Use with Grok Automations.
+- **`crsr_…`:** `Authorization: Bearer …` JSON POST. When the URL contains a UUID, the app also tries `https://api2.cursor.sh/automations/webhook/<uuid>`.
 
 Docs: [Webhook Triggers](https://docs.x.ai/grok/automations/webhooks)  
 UI: [grok.com/automations](https://grok.com/automations)
@@ -217,12 +220,23 @@ The other way off that bill is [grok2telegram](https://github.com/antonio-castel
 | `ADMIN_TELEGRAM_IDS` | Your numeric Telegram id(s) |
 | `GM_BACKEND` | `mock` or `webhook` |
 | `WEBHOOK_URL` | Grok Automation endpoint |
-| `WEBHOOK_SECRET` | `whsec_…` signing secret |
+| `WEBHOOK_SECRET` | `whsec_…` HMAC **or** `crsr_…` Bearer |
 | `WEBHOOK_REPLY` | `http` — read the POST response body |
 | `XAI_API_KEY` | From [console.x.ai](https://console.x.ai) — Grok’s voice in the group |
 | `XAI_MODEL` | `grok-4.6` unless you pick another |
 
 ---
+
+
+
+## Optional inline buttons
+
+Outbound replies can attach opaque inline buttons **without** editing `mesa/games/*`:
+
+- From Python: return `Reply(text="…", buttons=[{"id": "hit", "label": "Hit"}, …])`
+- From the GM JSON body: include `"buttons": [{"id": "hit", "label": "Hit"}, …]`
+
+Each tap announces `Name: Label` in chat, removes the keyboard, ignores a second tap on the same message, and runs `/cmd <id>` through the normal command path (`mesa/buttons.py`).
 
 ## 5. Useful commands
 
@@ -238,5 +252,6 @@ The other way off that bill is [grok2telegram](https://github.com/antonio-castel
 | `/cmd reset` | admin | close table (`reset hard` deletes JSON) |
 | `/cmd grant` / `/cmd revoke` | admin | table admins (`@user` or numeric id) |
 | `/cmd clear all` | admin | delete **every** group message from anyone |
+| `/cmd unload` | admin | acknowledge and stop the bot process |
 
 `/cmd clear` without `all` only prints the warning. The bot must be admin with **Delete messages**.
