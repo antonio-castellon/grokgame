@@ -26,7 +26,7 @@ I built it **for fun, for my son**, so he can drag his friends into a game witho
 
 If it works, we get a pocket tavern that fits in a schoolbag. If it does not, we still get a funny evening and some ASCII cards. Either way: the knight stays on the box art, the kids stay on Telegram, and the grown-up does not have to explain Steam to a twelve-year-old at 22:17.
 
-**Want to open your own table?** The boring (necessary) bits are in **[SETUP.md](SETUP.md)**.
+**Want to open your own table?** The boring (necessary) bits are in **[SETUP.md](SETUP.md)**. Safety rules for forks: **[docs/SAFETY.md](docs/SAFETY.md)**.
 
 ---
 
