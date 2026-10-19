@@ -28,7 +28,8 @@ def _row(text: str) -> str:
 def _wrap(text: str) -> list[str]:
     raw = text or ""
     # ASCII art: keep spaces and never reflow (Telegram <pre> needs this).
-    if any(ch in raw for ch in "+-|┌┐└┘│─\\/") or "  " in raw:
+    # Slash alone is not art — "/cmd …" must wrap. Keep "\\" and box chars.
+    if any(ch in raw for ch in "+-|┌┐└┘│─\\") or "  " in raw:
         if not raw.strip():
             return [_row("")]
         if len(raw) <= INNER:
